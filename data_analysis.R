@@ -138,33 +138,116 @@ for (i in 1:nrow(data_2018_to_2023)) {
   }  
 }
 
-
-# number of outbreaks per country
-outbreak_counts <- outbreak_data %>%
-  group_by(country_id) %>%
-  summarise(number_of_outbreaks = n())
-
-# subset for different countries
-country = 117
-subset_country <- data_2018_to_2023 %>%
-  filter(country_id == country)
-
-
-# histogram for the conflict outbreaks
+## histogram conflict outbreaks
 ggplot(outbreak_data, aes(x = outbreak_level)) +
-  geom_histogram(binwidth = log10(1.1), fill = "blue", color = "black", alpha = 0.1) +
+  geom_histogram(binwidth = 0.1, fill = "steelblue", color = "black", alpha = 0.9) +
   scale_x_log10() +
   labs(
-    title = "Histogram Outbreak-Level",
-    x = "Outbreak-Level",
-    y = "H(x)"
+    title = "Intensity-Based Histogram of Outbreak Levels",
+    x = "Outbreak Level",
+    y = "Frequency"
   ) +
-  theme_minimal()
-
-## plot #outbreaks per country vs. avrg. outbreak magnitude
-
-## plot time (in months) vs. #outbreaks
-
-
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, size = 0.1)
+  )
+  
 
 
+
+## dataset and plot: number doutbreaks per country vs. avrg. outbreak magnitude
+# number of outbreaks per country
+data_outbreak_byCtry <- outbreak_data %>%
+  group_by(country_id) %>%
+  summarise(number_of_outbreaks = n(),
+            avg_outbreak_level = mean(outbreak_level, na.rm = TRUE))
+
+data_outbreak_byCtry_avg_magnitude <- data_outbreak_byCtry %>%
+  group_by(number_of_outbreaks) %>%
+  summarise(
+    avg_outbreak_level = mean(avg_outbreak_level, na.rm = TRUE) 
+  )
+
+# plot
+ggplot(data_outbreak_byCtry_avg_magnitude, aes(x = number_of_outbreaks, y = avg_outbreak_level)) + 
+  geom_line(color = "steelblue", size = 1) +  
+  geom_point(color = "navy", size = 3) +  
+  labs(
+    title = "Average Magnitude of Conflict-Outbreaks",
+    x = "Number of Outbreaks per Country",
+    y = "Average Magnitude of Outbreak"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, size = 0.1)
+  )
+
+
+
+## dataset and plot: time (in months) vs. number of outbreaks
+# number of outbreaks per month
+data_outbreak_byMonth <- outbreak_data %>%
+  group_by(month_id) %>%
+  summarise(number_of_outbreak = n(),
+            number_of_outbreak_magn_greq_10 = sum(outbreak_level >= 10),
+            number_of_outbreak_magn_greq_100 = sum(outbreak_level >= 100))
+
+# row for month 523 (no outbreaks in this month)
+new_row <- data.frame(
+  month_id = 523,
+  number_of_outbreak = 0,
+  number_of_outbreak_magn_greq_10 = 0,
+  number_of_outbreak_magn_greq_100 = 0
+)
+
+# add row
+data_outbreak_byMonth <- rbind(
+  data_outbreak_byMonth[1:66, ],
+  new_row,
+  data_outbreak_byMonth[67:nrow(data_outbreak_byMonth), ]
+)
+
+# Modify dataset for grouping
+data_outbreak_byMonth_long <- data_outbreak_byMonth %>%
+  pivot_longer(
+    cols = c(
+      number_of_outbreak,
+      number_of_outbreak_magn_greq_10,
+      number_of_outbreak_magn_greq_100
+    ),
+    names_to = "outbreak_type",
+    values_to = "count"
+  )
+
+ggplot(data_outbreak_byMonth_long, aes(x = month_id, y = count, group = outbreak_type)) +
+  geom_line(aes(color = outbreak_type), size = 0.8) +
+  geom_area(aes(fill = outbreak_type), position = "identity", alpha = 0.4, show.legend = FALSE) +
+  scale_color_manual(
+    values = c(
+      "number_of_outbreak" = "black",
+      "number_of_outbreak_magn_greq_10" = "blue",
+      "number_of_outbreak_magn_greq_100" = "red"
+    ),
+    labels = c(">= 0", ">= 10", ">= 100")
+  ) +
+  scale_fill_manual(
+    values = c(
+      "number_of_outbreak" = "lightgrey",
+      "number_of_outbreak_magn_greq_10" = "lightblue",
+      "number_of_outbreak_magn_greq_100" = "salmon"
+    )
+  ) +
+  labs(
+    title = "Monthly Outbreak Magnitude for all Countries",
+    x = "Month ID",
+    y = "Number of Outbreaks",
+    color = "Outbreak\nMagnitude"
+  ) +
+  scale_x_continuous(
+    breaks = c(457, 469, 481, 493, 505, 517, 528),
+    labels = c("01.2018", "01.2019", "01.2020", "01.2021", "01.2022", "01.2023", "12.2023")
+  ) +
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, size = 0.1)
+  )
