@@ -1,4 +1,4 @@
-# descriptive data analysis of the actual years 2018-2023
+## descriptive data analysis of the actual years 2018-2023
 
 # load packages
 library(arrow)
@@ -70,8 +70,6 @@ for (i in 1:nrow(data_2018_to_2023)) {
   if(fatality_count_previous_month == 0 & fatality_count > 0){
     outbreak_level <- fatality_count - fatality_count_previous_month
   }
-  
-
 
   
   if(outbreak_level > 0){
@@ -110,7 +108,6 @@ for (i in 1:nrow(data_2018_to_2023)) {
       fatalities_month_past <- data_2018_to_2023$outcome[which(data_2018_to_2023$month_id == past_outbreak_month_id & 
                                                                  data_2018_to_2023$country_id == country_id)]
     }
-    
     
     conflict_months_past_count <- 0
     
@@ -151,8 +148,6 @@ ggplot(outbreak_data, aes(x = outbreak_level)) +
   theme(
     panel.border = element_rect(color = "black", fill = NA, size = 0.1)
   )
-  
-
 
 
 ## dataset and plot: number doutbreaks per country vs. avrg. outbreak magnitude
@@ -172,8 +167,11 @@ data_outbreak_byCtry_avg_magnitude <- data_outbreak_byCtry %>%
 ggplot(data_outbreak_byCtry_avg_magnitude, aes(x = number_of_outbreaks, y = avg_outbreak_level)) + 
   geom_line(color = "steelblue", size = 1) +  
   geom_point(color = "navy", size = 3) +  
+  scale_x_continuous(
+    breaks = seq(1, 17, by = 1)
+  ) +
   labs(
-    title = "Average Magnitude of Conflict-Outbreaks",
+    title = "Average #Fatalities per Conflict-Outbreaks",
     x = "Number of Outbreaks per Country",
     y = "Average Magnitude of Outbreak"
   ) +
@@ -247,7 +245,40 @@ ggplot(data_outbreak_byMonth_long, aes(x = month_id, y = count, group = outbreak
     breaks = c(457, 469, 481, 493, 505, 517, 528),
     labels = c("01.2018", "01.2019", "01.2020", "01.2021", "01.2022", "01.2023", "12.2023")
   ) +
+  scale_y_continuous(
+    breaks = seq(0, 10, by = 2)
+  ) +
   theme_minimal() +
   theme(
     panel.border = element_rect(color = "black", fill = NA, size = 0.1)
   )
+
+
+# sort avg_outbreak_level dataset 
+data_outbreak_byCtry_sorted <- data_outbreak_byCtry %>%
+  arrange(avg_outbreak_level)
+
+# horizontal barchart
+ggplot(tail(data_outbreak_byCtry_sorted, 15), aes(x = factor(country_id, levels = country_id), y = avg_outbreak_level)) +
+  geom_bar(stat = "identity", fill = "steelblue", color = "black") +
+  coord_flip() +
+  scale_x_discrete(
+    labels = c("Colombia", "Armenia", "CAR", "South Sudan", "Kyrgyzstan", "Tajikistan", 
+              "Burundi", "Burkina Faso", "Iran", "Azerbaijan", "Israel", "Chad", "Libya", "Sudan", "Ethipoia")
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 250, by= 25)
+  ) +
+  labs(
+    title = "Average Outbreak Level by Country",
+    x = "Country",
+    y = "Average Outbreak Level"
+  ) +
+  theme_minimal() +
+  theme(
+      panel.border = element_rect(color = "black", fill = NA, size = 0.1)
+    )
+
+
+
+
