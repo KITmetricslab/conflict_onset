@@ -16,39 +16,40 @@ base_path <- "C:/Users/fn3307/Documents/data views/all_available_cm_predictions"
 # subfolders for all models
 model_dirs <- list.dirs(base_path, recursive = FALSE)
 
-list_all_data <- list()
-
-for (model in model_dirs) {
-  year_dirs <- list.dirs(file.path(model, "cm"), recursive = FALSE)
-  outbreak_data <- data.frame()
+# returns one dataframe of all years from one model
+process_model <- function(model_path) {
+  # all directories of the years
+  year_dirs <- list.dirs(file.path(model_path, "cm"), recursive = FALSE)
   
-  print(basename(model))
+  # 
+  outbreak_data <- year_dirs %>%
+    map(list.files, full.names = TRUE, pattern = "\\.parquet") %>%  # performs list.files on every dir. of year_dirs; returns the full filepath names
+    flatten_chr() %>%                                              # converts list of filepaths into one vector
+    map_dfr(arrow::read_parquet)                                   # performs read_parquet on every element in the vector
   
-  for (year in year_dirs) {
-    
-    files <- list.files(year, full.names = TRUE, pattern = "\\.parquet")
-    
-    # read all files and bind them into a single data frame
-    model_data <- do.call(rbind, lapply(files, arrow::read_parquet))
-    
-    outbreak_data <- rbind(outbreak_data, model_data)
-  }
-  
-  list_all_data[[basename(model)]] <- outbreak_data
+  return(outbreak_data) # dataframe with all parquet files in year_dirs
 }
+
+# create list for all models
+list_all_data <- model_dirs %>%
+  set_names(basename(.)) %>% # set names of the list entries, basenames last name of the filepath in model_dirs
+  map(process_model) # perform process_model function
+
 
 
 # list with dataframes containing P(Y > 0)
 list_prob_onset <- list()
 list_model_names <- names(list_all_data)
 
-i <- 1
-for (model in list_all_data) {
-  month_list <- unique(unlist(model$month_id))
-  month_list <- head(month_list, -12)
+# list of months (Jan. 18 until Dec. 23)
+month_list <- seq(457,457 + 12*6 - 1, by = 1)
+# country_list (equal for each model)
+country_list <- unique(unlist(list_all_data$bodentien_rueter_negbin$country_id))
+
+
+for (j in seq_along(list_all_data)) {
   
-  prob_gr_zero_model_data <- data.frame(month_id = numeric(), country_id = numeric(), 
-                                        prob_gr_0 = numeric(), model = character())
+  model = list_all_data[[j]]
   
   prob_gr_zero_model_data <- model %>%
     filter(month_id %in% month_list, country_id %in% country_list) %>% # keep all rows that are in month_list and country_list
@@ -58,18 +59,13 @@ for (model in list_all_data) {
       prob_gr_0 = 1 - sum(outcome == 0) / n(),
       .groups = "drop"  #  result dataframe is not grouped (mutate is performed for the whole dataframe)
     ) %>%
-    mutate(model = list_model_names[i]) # adds new column
+    mutate(model = list_model_names[j]) # adds new column
   
-  list_prob_onset[[list_model_names[i]]] <- prob_gr_zero_model_data      
+  list_prob_onset[[list_model_names[j]]] <- prob_gr_zero_model_data  
   
-  i <- i + 1
-  
-  cat("\rFinished", i-1, "of", length(list_all_data))
+  cat("\rFinished", j, "of", length(list_all_data))
 }
 
-
-
-data_bodentien_rueter <- list_prob_onset$bodentien_rueter_negbin
 
 
 # month country list combination for onset and ongoing peace
@@ -81,62 +77,5 @@ data_bodentien_rueter <- list_prob_onset$bodentien_rueter_negbin
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# two lists with dataframes containing P(Y > 0) for all
-# a) onset-instances and b) ongoing peace instances 
-
-data_bodentien_rueter <- list_all_data$bodentien_rueter_negbin
-month_list <- unique(unlist(list_all_data$bodentien_rueter_negbin$month_id))
-month_list <- head(month_list, -12)
-
-country_list <- unique(unlist(list_all_data$bodentien_rueter_negbin$country_id))
-
-prob_gr_zero_model_data <- data.frame(month_id = numeric(), country_id = numeric(), prob_gr_0 = numeric(), model = character())
-
-country_list <- c(57, 70, 246)
-month_list <- c(457, 458, 459)
-
-prob_gr_zero_model_data_2 <- data_bodentien_rueter %>%
-  filter(month_id %in% month_list, country_id %in% country_list) %>% # keep all rows that are in month_list and country_list
-  group_by(month_id, country_id) %>%  # group by month and country (each combination of month_id and country_id is one group)
-  summarise( # summarise creates new dataframe and calculates values for each group
-    # returns one row for each combination of grouping variables
-    prob_gr_0 = 1 - sum(outcome == 0) / n(),
-    .groups = "drop"  #  result dataframe is not grouped (mutate is performed for the whole dataframe)
-  ) %>%
-  mutate(model = list_model_names[1]) # adds new column
 
 
