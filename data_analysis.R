@@ -1,6 +1,9 @@
 
 
-#### descriptive data analysis of the actual years 2018-2023 --------------------------------------------------------
+#### --------------------------------------------------------
+# descriptive data analysis of the actual years 2018-2023 
+#### --------------------------------------------------------
+
 
 # load packages
 library(arrow)
@@ -27,6 +30,54 @@ data_from_1990 <- arrow::read_parquet("C:/Users/fn3307/Documents/data views/cm_f
 # drop all columns but "country_id", "month_id" and "ged_sb"
 data_from_1990 <- data_from_1990 %>% select(country_id, month_id, ged_sb)
 
+
+
+
+## ongoing peace --------------------------------------------------------
+
+# create dataset for all ongoing peace instances
+# this dataset is used later on for the predicted onset probability distribution
+ongoing_peace_data <- data.frame(fatalities = integer(),
+                                 month_id = integer(), 
+                                 country_id = integer())
+
+## iterate over all rows of the data_2018_to_2023 data frame
+for (i in 1:nrow(data_2018_to_2023)) {
+  # get the country_id and month_id of the current row
+  country_id <- data_2018_to_2023$country_id[i]
+  month_id <- data_2018_to_2023$month_id[i]
+  
+  # get the fatality count of the current row
+  fatality_count <- data_2018_to_2023$outcome[i]
+  
+  # initialize variables
+  outbreak_level <- 0
+  fatality_count_previous_month <- NA
+  
+  ## column "outbreak_level":
+  # get the fatality count of the previous month
+  if (month_id == 457){
+    fatality_count_previous_month <- data_from_1990$ged_sb[which(data_from_1990$month_id == month_id - 1 & 
+                                                                   data_from_1990$country_id == country_id)]
+  } else{
+    fatality_count_previous_month <- data_2018_to_2023$outcome[which(data_2018_to_2023$month_id == month_id - 1 & 
+                                                                       data_2018_to_2023$country_id == country_id)]
+  }
+  
+  
+  if(fatality_count_previous_month == 0 & fatality_count == 0){
+  
+    ## add the data to data frame
+    ongoing_peace_data <- rbind(ongoing_peace_data, data.frame(fatalities = fatality_count,
+                                                               month_id = month_id, 
+                                                               country_id = country_id))
+    
+  }  
+}
+
+
+
+## conflict onset: peace_months_prior >= 1 --------------------------------------------------------
 
 # create new dataset that tracks each outbreak in the period 2018-2023
 # it has the columns "outbreak_level", "peace_months_prior", "conflict_months_after", "month_id", "country_id"
@@ -139,13 +190,26 @@ for (i in 1:nrow(data_2018_to_2023)) {
   }  
 }
 
-## histogram conflict outbreaks
+## histogram peace months prior
+ggplot(outbreak_data, aes(x = peace_months_prior)) +
+  geom_histogram(binwidth = 0.05, fill = "#90EE90", color = "black", alpha = 0.9) +
+  scale_x_log10() +
+  labs(
+    title = "Months of Peace Prior to Conflict Onsets (2018-2023)",
+    x = "Months in Peace Prior to Conflict Onset",
+    y = "Frequency"
+  ) +
+  theme_bw()
+
+
+## histogram conflict onset magnitude
 ggplot(outbreak_data, aes(x = outbreak_level)) +
   geom_histogram(binwidth = 0.1, fill = "steelblue", color = "black", alpha = 0.9) +
   scale_x_log10() +
   labs(
-    title = "Intensity-Based Histogram of Outbreak Levels",
-    x = "Outbreak Level",
+    title = "Intensity of Conflict Onsets: Fatalities in Initial Month (2018-2023)",
+    subtitle = "Direct Onset: 2018-2023",
+    x = "Fatalities",
     y = "Frequency"
   ) +
   theme_bw()
@@ -172,9 +236,10 @@ ggplot(data_outbreak_byCtry_avg_magnitude, aes(x = number_of_outbreaks, y = avg_
     breaks = seq(1, 17, by = 1)
   ) +
   labs(
-    title = "Average #Fatalities per Conflict-Outbreaks",
-    x = "Number of Outbreaks per Country",
-    y = "Average Magnitude of Outbreak"
+    title = "Average Fatalities per Conflict Onset",
+    subtitle = "Direct Onset: 2018-2023",
+    x = "Onsets per Country",
+    y = "Fatalities"
   ) +
   theme_bw()
 
@@ -234,10 +299,11 @@ ggplot(data_outbreak_byMonth_long, aes(x = month_id, y = count, group = outbreak
     )
   ) +
   labs(
-    title = "Monthly Outbreak Magnitude for all Countries",
-    x = "Month ID",
-    y = "Number of Outbreaks",
-    color = "Outbreak\nMagnitude"
+    title = "Monthly Fatalities for all Countries and Conflict Onsets",
+    subtitle = "Direct Onset: 2018-2023",
+    x = "Month",
+    y = "Onsets per Country",
+    color = "Fatalities"
   ) +
   scale_x_continuous(
     breaks = c(457, 469, 481, 493, 505, 517, 528),
@@ -265,17 +331,65 @@ ggplot(tail(data_outbreak_byCtry_sorted, 15), aes(x = factor(country_id, levels 
     breaks = seq(0, 250, by= 25)
   ) +
   labs(
-    title = "Average Outbreak Level by Country",
+    title = "Average Onset Fatalities for different Countries",
+    subtitle = "Direct Onset: 2018-2023",
     x = "Country",
-    y = "Average Outbreak Level"
+    y = "Fatalities"
   ) +
   theme_bw()
 
 
 
+## conflict onset: peace_months_prior >= 12 --------------------------------------------------------
+outbreak_data_12m_peace <- outbreak_data %>%
+  filter(peace_months_prior >= 12)
+
+## histogram conflict outbreak magnitude
+ggplot(outbreak_data_12m_peace, aes(x = outbreak_level)) +
+  geom_histogram(binwidth = 0.1, fill = "#2F4F4F", color = "black", alpha = 0.9) +
+  scale_x_log10() +
+  labs(
+    title = "Intensity of Conflict Onsets: Fatalities in Initial Month (2018-2023)",
+    subtitle = "One Year Prolonged Peace Onset: 2018-2023",
+    x = "Fatalities",
+    y = "Frequency"
+  ) +
+  theme_bw()
 
 
-### distribution of onset probabilities --------------------------------------------------------
+## dataset and plot: number doutbreaks per country vs. avrg. outbreak magnitude
+# number of outbreaks per country
+data_outbreak_byCtry_12m_peace <- outbreak_data_12m_peace %>%
+  group_by(country_id) %>%
+  summarise(number_of_outbreaks = n(),
+            avg_outbreak_level = mean(outbreak_level, na.rm = TRUE))
+
+data_outbreak_byCtry_avg_magnitude_12m_peace <- data_outbreak_byCtry_12m_peace %>%
+  group_by(number_of_outbreaks) %>%
+  summarise(
+    avg_outbreak_level = mean(avg_outbreak_level, na.rm = TRUE) 
+  )
+
+# plot
+ggplot(data_outbreak_byCtry_avg_magnitude_12m_peace, aes(x = number_of_outbreaks, y = avg_outbreak_level)) + 
+  geom_line(color = "#2F4F4F", size = 1) +  
+  geom_point(color = "black", size = 3) +  
+  scale_x_continuous(
+    breaks = seq(1, 17, by = 1)
+  ) +
+  labs(
+    title = "Average Fatalities per Conflict Onset",
+    subtitle = "One Year Prolonged Peace Onset: 2018-2023",
+    x = "Onsets per Country",
+    y = "Fatalities"
+  ) +
+  theme_bw()
+
+
+
+#### --------------------------------------------------------
+# distribution of onset probabilities
+#### --------------------------------------------------------
 
 # path to directory
 base_path <- "C:/Users/fn3307/Documents/data views/all_available_cm_predictions"
@@ -333,6 +447,74 @@ for (j in seq_along(list_all_data)) {
   cat("\rFinished", j, "of", length(list_all_data))
 }
 
+###############
+# density plots
+###############
+
+
+## ongoing peace --------------------------------------------------------
+
+# join outbreak data and the prob_gr_0 observations from prob_data
+for (model_name in names(list_prob_onset)) {
+  
+  prob_data_ongoing_peace <- list_prob_onset[[model_name]]
+  
+  prob_data_ongoing_peace <- prob_data_ongoing_peace %>%
+    rename(!!paste0("prob_gr_0_", model_name) := prob_gr_0)
+  
+  prob_data_ongoing_peace <- prob_data_ongoing_peace %>%
+    select(-model)
+  
+  ongoing_peace_data <- ongoing_peace_data %>%
+    left_join(prob_data_ongoing_peace, by = c("month_id", "country_id"))
+}
+
+# delete column for zero model
+ongoing_peace_data <- ongoing_peace_data %>%
+  select(-prob_gr_0_zero)
+
+prob_columns_ongoing_peace <- ongoing_peace_data %>%
+  select(starts_with("prob_gr_0"))
+
+# long format for the density plots
+prob_long_ongoing_peace <- prob_columns_ongoing_peace %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "model",
+    values_to = "probability_gr_0"
+  ) %>%
+  mutate(model = sub("^prob_gr_0_", "", model))
+
+
+# density plot for every observation over all models
+ggplot(prob_long_ongoing_peace, aes(x = probability_gr_0)) +
+  geom_density(color="black",fill="#90EE90", size = 1, alpha = 0.6) +
+  labs(
+    title = "Distribution of Onset Probabilities 2018-2023: All Models",
+    subtitle = "Ongoing Peace: 2018-2023",
+    x = "onset probability",
+    y = "density"
+  ) +
+  theme_bw()
+
+# density for each model
+ggplot(prob_long_ongoing_peace, aes(x = probability_gr_0)) +
+  geom_density(fill = "#90EE90", alpha = 0.6, size = 0.8) + 
+  facet_wrap(~ model, scales = "free_y") +  # facet for each model
+  labs(
+    title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
+    subtitle = "Ongoing Peace: 2018-2023",
+    x = "onset probability",
+    y = "density"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+## conflict onset: peace_months_prior >= 1 --------------------------------------------------------
+
 # join outbreak data and the prob_gr_0 observations from prob_data
 for (model_name in names(list_prob_onset)) {
   
@@ -370,6 +552,7 @@ ggplot(prob_long, aes(x = probability_gr_0)) +
   geom_density(color="black",fill="steelblue", size = 1, alpha = 0.6) +
   labs(
     title = "Distribution of Onset Probabilities 2018-2023: All Models",
+    subtitle = "Direct Onset: 2018-2023",
     x = "onset probability",
     y = "density"
   ) +
@@ -381,6 +564,7 @@ ggplot(prob_long, aes(x = probability_gr_0)) +
   facet_wrap(~ model, scales = "free_y") +  # facet for each model
   labs(
     title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
+    subtitle = "Direct Onset: 2018-2023",
     x = "onset probability",
     y = "density"
   ) +
@@ -391,5 +575,63 @@ ggplot(prob_long, aes(x = probability_gr_0)) +
   )
 
 
+## conflict onset: peace_months_prior >= 12 --------------------------------------------------------
+
+# join outbreak data and the prob_gr_0 observations from prob_data
+for (model_name in names(list_prob_onset)) {
+  
+  prob_data_12m_peace <- list_prob_onset[[model_name]]
+  
+  prob_data_12m_peace <- prob_data_12m_peace %>%
+    rename(!!paste0("prob_gr_0_", model_name) := prob_gr_0)
+  
+  prob_data_12m_peace <- prob_data_12m_peace %>%
+    select(-model)
+  
+  outbreak_data_12m_peace <- outbreak_data_12m_peace %>%
+    left_join(prob_data_12m_peace, by = c("month_id", "country_id"))
+}
+
+# delete column for zero model
+outbreak_data_12m_peace <- outbreak_data_12m_peace %>%
+  select(-prob_gr_0_zero)
+
+prob_columns_12m_peace <- outbreak_data_12m_peace %>%
+  select(starts_with("prob_gr_0"))
+
+# long format for the density plots
+prob_long_12m_peace <- prob_columns_12m_peace %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "model",
+    values_to = "probability_gr_0"
+  ) %>%
+  mutate(model = sub("^prob_gr_0_", "", model))
 
 
+# density plot for every observation over all models
+ggplot(prob_long_12m_peace, aes(x = probability_gr_0)) +
+  geom_density(color="black",fill="#2F4F4F", size = 1, alpha = 0.6) +
+  labs(
+    title = "Distribution of Onset Probabilities 2018-2023: All Models",
+    subtitle = "One Year Prolonged Peace Onset: 2018-2023",
+    x = "onset probability",
+    y = "density"
+  ) +
+  theme_bw()
+
+# density for each model
+ggplot(prob_long_12m_peace, aes(x = probability_gr_0)) +
+  geom_density(fill = "#2F4F4F", alpha = 0.6, size = 0.8) + 
+  facet_wrap(~ model, scales = "free_y") +  # facet for each model
+  labs(
+    title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
+    subtitle = "One Year Prolonged Peace Onset: 2018-2023",
+    x = "onset probability",
+    y = "density"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(face = "bold", size = 14)
+  )
