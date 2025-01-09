@@ -497,6 +497,7 @@ ggplot(prob_long_ongoing_peace, aes(x = probability_gr_0)) +
   ) +
   theme_bw()
 
+
 # density for each model
 ggplot(prob_long_ongoing_peace, aes(x = probability_gr_0)) +
   geom_density(fill = "#90EE90", alpha = 0.6, size = 0.8) + 
@@ -552,9 +553,20 @@ ggplot(prob_long, aes(x = probability_gr_0)) +
   geom_density(color="black",fill="steelblue", size = 1, alpha = 0.6) +
   labs(
     title = "Distribution of Onset Probabilities 2018-2023: All Models",
-    subtitle = "Direct Onset: 2018-2023",
+    subtitle = paste0("Direct Onset: 2018-2023 (", length(outbreak_data$outbreak_level), " Onsets)"),
     x = "onset probability",
     y = "density"
+  ) +
+  theme_bw()
+
+# boxplot for every observation over all models
+ggplot(prob_long, aes(y = probability_gr_0)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.6, color = "black", size = 0.8, outlier.color = "red", outlier.size = 2) +
+  labs(
+    title = "Boxplot of Onset Probabilities 2018-2023: All Models",
+    subtitle = paste0("Direct Onset: 2018-2023 (", length(outbreak_data$outbreak_level), " Onsets)"),
+    x = NULL, 
+    y = "Onset Probability"
   ) +
   theme_bw()
 
@@ -564,9 +576,25 @@ ggplot(prob_long, aes(x = probability_gr_0)) +
   facet_wrap(~ model, scales = "free_y") +  # facet for each model
   labs(
     title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
-    subtitle = "Direct Onset: 2018-2023",
+    subtitle = paste0("Direct Onset: 2018-2023 (", length(outbreak_data$outbreak_level), " Onsets)"),
     x = "onset probability",
     y = "density"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# boxplot for each model
+ggplot(prob_long, aes(x = probability_gr_0)) +
+  geom_boxplot(fill = "steelblue", alpha = 0.6, color = "black", size = 0.6, outlier.color = "red", outlier.size = 1) +
+  facet_wrap(~ model, scales = "free_y") +  # facet for each model
+  labs(
+    title = "Boxplot of Onset Probabilities 2018-2023: Individual Models",
+    subtitle = paste0("Direct Onset: 2018-2023 (", length(outbreak_data$outbreak_level), " Onsets)"),
+    x = "Onset Probability",
+    y = NULL
   ) +
   theme_minimal() +
   theme(
@@ -614,9 +642,23 @@ ggplot(prob_long_12m_peace, aes(x = probability_gr_0)) +
   geom_density(color="black",fill="#2F4F4F", size = 1, alpha = 0.6) +
   labs(
     title = "Distribution of Onset Probabilities 2018-2023: All Models",
-    subtitle = "One Year Prolonged Peace Onset: 2018-2023",
+    subtitle = paste0("One Year Prolonged Peace Onset: 2018-2023 (", length(outbreak_data_12m_peace$outbreak_level), " Onsets)"),
     x = "onset probability",
     y = "density"
+  ) +
+  theme_bw()
+
+
+
+
+# boxplot for every observation over all models
+ggplot(prob_long_12m_peace, aes(y = probability_gr_0)) +
+  geom_boxplot(fill = "#2F4F4F", alpha = 0.6, color = "black", size = 0.8, outlier.color = "red", outlier.size = 2) +
+  labs(
+    title = "Boxplot of Onset Probabilities 2018-2023: All Models",
+    subtitle = paste0("One Year Prolonged Peace Onset: 2018-2023 (", length(outbreak_data_12m_peace$outbreak_level), " Onsets)"),
+    x = NULL, 
+    y = "Onset Probability"
   ) +
   theme_bw()
 
@@ -626,10 +668,27 @@ ggplot(prob_long_12m_peace, aes(x = probability_gr_0)) +
   facet_wrap(~ model, scales = "free_y") +  # facet for each model
   labs(
     title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
-    subtitle = "One Year Prolonged Peace Onset: 2018-2023",
+    subtitle = paste0("One Year Prolonged Peace Onset: 2018-2023 (", length(outbreak_data_12m_peace$outbreak_level), " Onsets)"),
     x = "onset probability",
     y = "density"
   ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# boxplot for each model
+ggplot(prob_long_12m_peace, aes(x = probability_gr_0)) +
+  geom_boxplot(fill = "#2F4F4F", alpha = 0.6, color = "black", size = 0.6, outlier.color = "red", outlier.size = 1) +
+  facet_wrap(~ model, scales = "free_y") +  # facet for each model
+  labs(
+    title = "Boxplot of Onset Probabilities 2018-2023: Individual Models",
+    subtitle = paste0("One Year Prolonged Peace Onset: 2018-2023 (", length(outbreak_data_12m_peace$outbreak_level), " Onsets)"),
+    x = "Onset Probability",
+    y = NULL
+  ) +
+  scale_y_continuous(limits = c(-0.6, 0.6)) +
   theme_minimal() +
   theme(
     strip.text = element_text(size = 10, face = "bold"),
