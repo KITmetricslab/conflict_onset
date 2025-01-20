@@ -387,20 +387,6 @@ ggplot(data_outbreak_byCtry_avg_magnitude_12m_peace, aes(x = number_of_outbreaks
 
 
 
-
-
-
-outbreak_data_less_12m_peace <- outbreak_data %>%
-  filter(peace_months_prior < 12)
-
-
-
-
-
-
-
-
-
 #### --------------------------------------------------------
 # distribution of onset probabilities
 #### --------------------------------------------------------
@@ -521,73 +507,6 @@ ggplot(prob_long_ongoing_peace, aes(x = probability_gr_0)) +
     subtitle = "Ongoing Peace: 2018-2023",
     x = "onset probability",
     y = "density"
-  ) +
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 10, face = "bold"),
-    plot.title = element_text(face = "bold", size = 14)
-  )
-
-
-## previous month has peace --------------------------------------------------------------------------
-
-prob_long_month_tMinus1_zero <- rbind(prob_long, prob_long)
-
-
-# density plot for every observation over all models
-ggplot(prob_long_month_tMinus1_zero, aes(x = probability_gr_0)) +
-  geom_density(color="black",fill="#5F2F4F", size = 1, alpha = 0.6) +
-  labs(
-    title = "Distribution of Onset Probabilities 2018-2023: All Models",
-    subtitle = "Previous Month Peace: 2018-2023",
-    x = "onset probability",
-    y = "density"
-  ) +
-  theme_bw()
-
-# boxplot for every observation over all models
-ggplot(prob_long_month_tMinus1_zero, aes(y = probability_gr_0)) +
-  geom_boxplot(fill = "#5F2F4F", alpha = 0.6, color = "black", size = 0.6, outlier.color = "red", outlier.size = 2, width = 0.4) +
-  labs(
-    title = "Boxplot of Onset Probabilities 2018-2023: All Models",
-    subtitle = "Previous Month Peace: 2018-2023",
-    x = NULL, 
-    y = "Onset Probability"
-  ) +
-  scale_x_continuous(
-    limits = c(-0.4, 0.4)
-  ) +
-  theme_bw() +
-  theme(
-    axis.text.x = element_blank(),  
-    axis.ticks.x = element_blank()
-  )
-
-# density for each model
-ggplot(prob_long_month_tMinus1_zero, aes(x = probability_gr_0)) +
-  geom_density(fill = "#5F2F4F", alpha = 0.6, size = 0.8) + 
-  facet_wrap(~ model, scales = "free_y") +  # facet for each model
-  labs(
-    title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
-    subtitle = "Previous Month Peace: 2018-2023",
-    x = "onset probability",
-    y = "density"
-  ) +
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 10, face = "bold"),
-    plot.title = element_text(face = "bold", size = 14)
-  )
-
-# boxplot for each model
-ggplot(prob_long_month_tMinus1_zero, aes(x = probability_gr_0)) +
-  geom_boxplot(fill = "#5F2F4F", alpha = 0.6, color = "black", size = 0.6, outlier.color = "red", outlier.size = 1) +
-  facet_wrap(~ model, scales = "free_y") +  # facet for each model
-  labs(
-    title = "Boxplot of Onset Probabilities 2018-2023: Individual Models",
-    subtitle = "Previous Month Peace: 2018-2023",
-    x = "Onset Probability",
-    y = NULL
   ) +
   theme_minimal() +
   theme(
@@ -809,93 +728,47 @@ ggplot(prob_long_12m_peace, aes(x = probability_gr_0)) +
 
 
 
+## previous month has peace --------------------------------------------------------------------------
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## conflict onset: peace_months_prior < 12 --------------------------------------------------------
-
-# join outbreak data and the prob_gr_0 observations from prob_data
-for (model_name in names(list_prob_onset)) {
-  
-  prob_data_less_12m_peace <- list_prob_onset[[model_name]]
-  
-  prob_data_less_12m_peace <- prob_data_less_12m_peace %>%
-    rename(!!paste0("prob_gr_0_", model_name) := prob_gr_0)
-  
-  prob_data_less_12m_peace <- prob_data_less_12m_peace %>%
-    select(-model)
-  
-  outbreak_data_less_12m_peace <- outbreak_data_less_12m_peace %>%
-    left_join(prob_data_less_12m_peace, by = c("month_id", "country_id"))
-}
-
-# delete column for zero model
-outbreak_data_less_12m_peace <- outbreak_data_less_12m_peace %>%
-  select(-prob_gr_0_zero)
-
-prob_columns_less_12m_peace <- outbreak_data_less_12m_peace %>%
-  select(starts_with("prob_gr_0"))
-
-# long format for the density plots
-prob_long_less_12m_peace <- prob_columns_less_12m_peace %>%
-  pivot_longer(
-    cols = everything(),
-    names_to = "model",
-    values_to = "probability_gr_0"
-  ) %>%
-  mutate(model = sub("^prob_gr_0_", "", model))
+prob_long_month_tMinus1_zero <- rbind(prob_long, prob_long_ongoing_peace)
 
 
 # density plot for every observation over all models
-ggplot(prob_long_less_12m_peace, aes(x = probability_gr_0)) +
+ggplot(prob_long_month_tMinus1_zero, aes(x = probability_gr_0)) +
   geom_density(color="black",fill="#5F2F4F", size = 1, alpha = 0.6) +
   labs(
     title = "Distribution of Onset Probabilities 2018-2023: All Models",
-    subtitle = paste0("Less than one Year Peace Onset: 2018-2023 (", length(outbreak_data_less_12m_peace$outbreak_level), " Onsets)"),
+    subtitle = "Previous Month Peace: 2018-2023",
     x = "onset probability",
     y = "density"
   ) +
   theme_bw()
 
-
-
-
 # boxplot for every observation over all models
-ggplot(prob_long_less_12m_peace, aes(y = probability_gr_0)) +
-  geom_boxplot(fill = "#5F2F4F", alpha = 0.6, color = "black", size = 0.8, outlier.color = "red", outlier.size = 2) +
+ggplot(prob_long_month_tMinus1_zero, aes(y = probability_gr_0)) +
+  geom_boxplot(fill = "#5F2F4F", alpha = 0.6, color = "black", size = 0.6, outlier.color = "red", outlier.size = 2, width = 0.4) +
   labs(
     title = "Boxplot of Onset Probabilities 2018-2023: All Models",
-    subtitle = paste0("Less than one Year Peace Onset: 2018-2023 (", length(outbreak_data_less_12m_peace$outbreak_level), " Onsets)"),
+    subtitle = "Previous Month Peace: 2018-2023",
     x = NULL, 
     y = "Onset Probability"
   ) +
-  theme_bw()
+  scale_x_continuous(
+    limits = c(-0.4, 0.4)
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_blank(),  
+    axis.ticks.x = element_blank()
+  )
 
 # density for each model
-ggplot(prob_long_less_12m_peace, aes(x = probability_gr_0)) +
+ggplot(prob_long_month_tMinus1_zero, aes(x = probability_gr_0)) +
   geom_density(fill = "#5F2F4F", alpha = 0.6, size = 0.8) + 
   facet_wrap(~ model, scales = "free_y") +  # facet for each model
   labs(
     title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
-    subtitle = paste0("Less than one Year Peace Onset: 2018-2023 (", length(outbreak_data_less_12m_peace$outbreak_level), " Onsets)"),
+    subtitle = "Previous Month Peace: 2018-2023",
     x = "onset probability",
     y = "density"
   ) +
@@ -906,16 +779,15 @@ ggplot(prob_long_less_12m_peace, aes(x = probability_gr_0)) +
   )
 
 # boxplot for each model
-ggplot(prob_long_less_12m_peace, aes(x = probability_gr_0)) +
+ggplot(prob_long_month_tMinus1_zero, aes(x = probability_gr_0)) +
   geom_boxplot(fill = "#5F2F4F", alpha = 0.6, color = "black", size = 0.6, outlier.color = "red", outlier.size = 1) +
   facet_wrap(~ model, scales = "free_y") +  # facet for each model
   labs(
     title = "Boxplot of Onset Probabilities 2018-2023: Individual Models",
-    subtitle = paste0("Less than one Year Peace Onset: 2018-2023 (", length(outbreak_data_less_12m_peace$outbreak_level), " Onsets)"),
+    subtitle = "Previous Month Peace: 2018-2023",
     x = "Onset Probability",
     y = NULL
   ) +
-  scale_y_continuous(limits = c(-0.6, 0.6)) +
   theme_minimal() +
   theme(
     strip.text = element_text(size = 10, face = "bold"),
