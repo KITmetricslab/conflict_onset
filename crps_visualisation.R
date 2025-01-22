@@ -80,30 +80,30 @@ names(models_crps) <- model_names
 # save(models_crps, file = "output/models_crps.RData")
 load("output/models_crps.RData")
 
-## -----
-# compute log-score on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
-## -----
-models_logS <- list()
 
-for (m in 1:n_models) {
-  logS_m <- apply(cm_pairs, 1, function(cm_pair) {
-    print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
-    true_observation <- observations %>%
-      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-      select(outcome)
-    pred_sample <- predictive_samples[[m]] %>%
-      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-      select(outcome)
-    logs_sample(y = unlist(true_observation),
-                dat = unlist(pred_sample))
-  })
-  models_logS[[m]] <- data.frame("country_id" = cm_pairs[,1], 
-                                 "month_id" = cm_pairs[,2],
-                                 "logS" = logS_m)
-}
-names(models_logS) <- model_names
-# save(models_logS, file = "output/models_logS.RData")
-load("output/models_logS.RData")
+## -----
+# compute Brier score on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
+## -----
+
+# compute empirical probabilities
+models_predictive_probabilities <- lapply(predictive_samples, function(pred_sample) {
+  pred_sample %>%
+    mutate("predicted_conflict" = outcome > 0) %>%
+    group_by(country_id, month_id) %>%
+    summarise(predictive_probability = mean(predicted_conflict))
+})
+
+# merge with observations and compute summands of brier score for each model, month and country
+models_brier <- lapply(models_predictive_probabilities, function(pred_probs) {
+  observations %>% inner_join(pred_probs,
+                              by=c("country_id"="country_id", "month_id"="month_id")) %>%
+    mutate("actual_conflict" = outcome > 0) %>%
+    mutate("brier" = (actual_conflict - predictive_probability)^2) %>%
+    select("country_id", "month_id", "outcome", "actual_conflict", "predictive_probability", "brier")
+})
+
+save(models_brier, file = "output/models_brier.RData")
+# load("output/models_brier.RData")
 
 
 ## -----
@@ -144,13 +144,14 @@ situation_month <- ifelse(!actual_conflict$conflict & !conflict_prev_month, "pea
                                         "deescalation"))) # conflict, no conflict
 
 situation_year <- ifelse(!actual_conflict$conflict & !conflict_prev_year, "peace",
-                          ifelse(actual_conflict$conflict & !conflict_prev_year, "onset",
-                                 ifelse(actual_conflict$conflict & conflict_prev_year, "conflict",
-                                        "deescalation")))
+                         ifelse(actual_conflict$conflict & !conflict_prev_year, "onset",
+                                ifelse(actual_conflict$conflict & conflict_prev_year, "conflict",
+                                       "deescalation")))
 
 sum(situation_month != situation_year)
 
 conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = as.vector(situation_month), "situation_year" = as.vector(situation_year))
+
 
 ## -----
 ## Plot CRPS values by conflict situation
@@ -165,6 +166,7 @@ models_crps_conflict_year <- models_crps_conflict %>% select(!c("country_id", "m
 models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] <- models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] / nrow(models_crps_conflict) # compute contributions to average CRPS
 models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] <- models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] / nrow(models_crps_conflict) # compute contributions to average CRPS
 
+colSums(models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] )
 # create ggplot data frames
 crps_month <- data.frame("CRPS" = unlist(c(models_crps_conflict_month[,2:ncol(models_crps_conflict_month)])),
                          "Situation" = rep(models_crps_conflict_month$situation_month, ncol(models_crps_conflict_month)-1),
@@ -176,14 +178,86 @@ crps_year <- data.frame("CRPS" = unlist(c(models_crps_conflict_year[,2:ncol(mode
 # exclude 3 largest models with insane CRPS values "Neg_Bin_GAM", "P_GAM", "TW_GAM"
 ggplot(crps_month[-which(crps_month$Model %in% c("Neg_Bin_GAM", "P_GAM", "TW_GAM")), ], aes(fill = Situation, y = Model, x = CRPS)) + 
   geom_bar(position = "stack", stat = "identity") +
-  # scale_fill_viridis(discrete = T) +
+  # xlim(0.0, 1) + 
+  scale_fill_manual("legend", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa")) +
   ggtitle("Contribution to average CRPS (01-2018 to 12-2023, all countries) per conflict situation, reference: previous month") +
-  # theme_ipsum() +
   xlab("Contribution to average CRPS per conflict situation")
 
 ggplot(crps_year[-which(crps_year$Model %in% c("Neg_Bin_GAM", "P_GAM", "TW_GAM")), ], aes(fill = Situation, y = Model, x = CRPS)) + 
   geom_bar(position = "stack", stat = "identity") +
-  # scale_fill_viridis(discrete = T) +
+  # xlim(0.0, 1) + 
+  scale_fill_manual("legend", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa")) +
   ggtitle("Contribution to average CRPS (01-2018 to 12-2023, all countries) per conflict situation, reference: previous year") +
-  # theme_ipsum() +
   xlab("Contribution to average CRPS per conflict situation")
+
+
+## -----
+## Plot Brier values by conflict situation
+## -----
+models_brier_conflict <- lapply(models_brier, function(m) m %>% select("country_id", "month_id", "brier")) %>%
+  reduce(left_join, c("country_id", "month_id"))
+names(models_brier_conflict) <- c("country_id", "month_id", model_names)
+models_brier_conflict <- list(models_brier_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
+
+## -----
+# a) create ggplots of contributions to average Brier scores for all conflict situations
+## -----
+models_brier_conflict_month <- models_brier_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum)
+models_brier_conflict_year <- models_brier_conflict %>% select(!c("country_id", "month_id", "situation_month")) %>% group_by(situation_year) %>% summarise_all(sum)
+
+models_brier_conflict_month[,2:ncol(models_brier_conflict_month)] <- models_brier_conflict_month[,2:ncol(models_brier_conflict_month)] / nrow(models_brier_conflict) # compute contributions to average brier
+models_brier_conflict_year[,2:ncol(models_brier_conflict_year)] <- models_brier_conflict_year[,2:ncol(models_brier_conflict_year)] / nrow(models_brier_conflict) # compute contributions to average brier
+
+brier_month <- data.frame("Brier" = unlist(c(models_brier_conflict_month[,2:ncol(models_brier_conflict_month)])),
+                          "Situation" = rep(models_brier_conflict_month$situation_month, ncol(models_brier_conflict_month)-1),
+                          "Model" = rep(names(models_brier_conflict_month)[2:ncol(models_brier_conflict_month)], each = 4))
+brier_year <- data.frame("Brier" = unlist(c(models_brier_conflict_year[,2:ncol(models_brier_conflict_year)])),
+                         "Situation" = rep(models_brier_conflict_year$situation_year, ncol(models_brier_conflict_year)-1),
+                         "Model" = rep(names(models_brier_conflict_year)[2:ncol(models_brier_conflict_year)], each = 4))
+
+# exclude 3 largest models with insane Brier values "Neg_Bin_GAM", "P_GAM", "TW_GAM"
+ggplot(brier_month[-which(brier_month$Model %in% c("Neg_Bin_GAM", "P_GAM", "TW_GAM")), ], aes(fill = Situation, y = Model, x = Brier)) + 
+  geom_bar(position = "stack", stat = "identity") +
+  xlim(0.0, 1) + 
+  scale_fill_manual("legend", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa")) +
+  ggtitle("Contribution to average Brier score (01-2018 to 12-2023, all countries) per conflict situation, reference: previous month") +
+  xlab("Contribution to average Brier score per conflict situation")
+
+ggplot(brier_year[-which(brier_year$Model %in% c("Neg_Bin_GAM", "P_GAM", "TW_GAM")), ], aes(fill = Situation, y = Model, x = Brier)) + 
+  geom_bar(position = "stack", stat = "identity") +
+  xlim(0.0, 1) + 
+  ggtitle("Contribution to average Brier score (01-2018 to 12-2023, all countries) per conflict situation, reference: previous year") +
+  scale_fill_manual("legend", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa")) +
+  xlab("Contribution to average Brier score per conflict situation")
+
+
+## -----
+# b) create ggplots of contributions to average Brier scores for previously no conflict, i.e. "peace" and "onset"
+## -----
+models_brier_prev_peace_month <- models_brier_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum) %>% filter(situation_month %in% c("peace", "onset"))
+models_brier_prev_peace_year <- models_brier_conflict %>% select(!c("country_id", "month_id", "situation_month")) %>% group_by(situation_year) %>% summarise_all(sum) %>% filter(situation_year %in% c("peace", "onset"))
+
+models_brier_prev_peace_month[,2:ncol(models_brier_prev_peace_month)] <- models_brier_prev_peace_month[,2:ncol(models_brier_prev_peace_month)] / nrow(models_brier_conflict %>% filter(situation_month %in% c("peace", "onset"))) # compute contributions to average brier
+models_brier_prev_peace_year[,2:ncol(models_brier_prev_peace_year)] <- models_brier_prev_peace_year[,2:ncol(models_brier_conflict_year)] / nrow(models_brier_conflict %>% filter(situation_year %in% c("peace", "onset"))) # compute contributions to average brier
+
+brier_prev_peace_month <- data.frame("Brier" = unlist(c(models_brier_prev_peace_month[,2:ncol(models_brier_prev_peace_month)])),
+                                     "Situation" = rep(models_brier_prev_peace_month$situation_month, ncol(models_brier_prev_peace_month)-1),
+                                     "Model" = rep(names(models_brier_prev_peace_month)[2:ncol(models_brier_prev_peace_month)], each = 2))
+brier_prev_peace_year <- data.frame("Brier" = unlist(c(models_brier_prev_peace_year[,2:ncol(models_brier_prev_peace_year)])),
+                                    "Situation" = rep(models_brier_prev_peace_year$situation_year, ncol(models_brier_prev_peace_year)-1),
+                                    "Model" = rep(names(models_brier_prev_peace_year)[2:ncol(models_brier_prev_peace_year)], each = 2))
+
+# exclude 3 largest models with insane Brier values "Neg_Bin_GAM", "P_GAM", "TW_GAM"
+ggplot(brier_prev_peace_month[-which(brier_prev_peace_month$Model %in% c("Neg_Bin_GAM", "P_GAM", "TW_GAM")), ], aes(fill = Situation, y = Model, x = Brier)) + 
+  geom_bar(position = "stack", stat = "identity") +
+  xlim(0.0, 1) + 
+  scale_fill_manual("legend", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa")) +
+  ggtitle("Contribution to average Brier score (01-2018 to 12-2023, all countries) in case of previous peace, reference: previous month") +
+  xlab("Contribution to average Brier score per conflict situation")
+
+ggplot(brier_prev_peace_year[-which(brier_prev_peace_year$Model %in% c("Neg_Bin_GAM", "P_GAM", "TW_GAM")), ], aes(fill = Situation, y = Model, x = Brier)) + 
+  geom_bar(position = "stack", stat = "identity") +
+  xlim(0.0, 1) + 
+  ggtitle("Contribution to average Brier score (01-2018 to 12-2023, all countries) in case of previous peace, reference: previous year") +
+  scale_fill_manual("legend", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa")) +
+  xlab("Contribution to average Brier score per conflict situation")
