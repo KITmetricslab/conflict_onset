@@ -60,23 +60,23 @@ cm_pairs <- cbind(rep(country_ids, each = length(actuals_ids)),
 
 models_crps <- list()
 
-for (m in 1:n_models) {
-  crps_m <- apply(cm_pairs, 1, function(cm_pair) {
-    print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
-    true_observation <- observations %>%
-      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-      select(outcome)
-    pred_sample <- predictive_samples[[m]] %>%
-      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-      select(outcome)
-    crps_sample(y = unlist(true_observation),
-                dat = unlist(pred_sample))
-  })
-  models_crps[[m]] <- data.frame("country_id" = cm_pairs[,1], 
-                                 "month_id" = cm_pairs[,2],
-                                 "crps" = crps_m)
-}
-names(models_crps) <- model_names
+# for (m in 1:n_models) {
+#   crps_m <- apply(cm_pairs, 1, function(cm_pair) {
+#     print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
+#     true_observation <- observations %>%
+#       filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
+#       select(outcome)
+#     pred_sample <- predictive_samples[[m]] %>%
+#       filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
+#       select(outcome)
+#     crps_sample(y = unlist(true_observation),
+#                 dat = unlist(pred_sample))
+#   })
+#   models_crps[[m]] <- data.frame("country_id" = cm_pairs[,1], 
+#                                  "month_id" = cm_pairs[,2],
+#                                  "crps" = crps_m)
+# }
+# names(models_crps) <- model_names
 # save(models_crps, file = "output/models_crps.RData")
 load("output/models_crps.RData")
 
@@ -102,7 +102,7 @@ models_brier <- lapply(models_predictive_probabilities, function(pred_probs) {
     select("country_id", "month_id", "outcome", "actual_conflict", "predictive_probability", "brier")
 })
 
-save(models_brier, file = "output/models_brier.RData")
+#save(models_brier, file = "output/models_brier.RData")
 # load("output/models_brier.RData")
 
 

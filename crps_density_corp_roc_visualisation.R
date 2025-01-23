@@ -36,65 +36,61 @@ files_actuals_from18 <- list.files(data_path, pattern = "cm_actuals_\\d{4}\\.par
 # read all files and bind them into a single data frame
 observations_18_24 <- do.call(rbind, lapply(files_actuals_from18, arrow::read_parquet)) # observations from 2018 - 2024
 
-
 ## -----
 # load predictive samples from benchmark models and submitted forecasts
 ## -----
 
-# subfolders for all models
-model_dirs <- list.dirs(paste0(data_path,"all_available_cm_predictions"), recursive = FALSE)
+benchmark_names <- c("boot_240", "conflictology", "last", "zero")
+submissions_names <- c("bodentien_rueter_negbin", "bodentien_rueter_neuralnet", "conflictforecast_v2", "Neg_Bin_GAM", "Neg_Bin_GLMM",
+                       "P_GAM", "P_GLMM", "quantile_forecast", "ShapeFinder", "submission_final_gpcmm", "submission_final_hpmm",
+                       "submission_final_omm", "submission_muchlinski_thornhill", "tft", "TW_GAM", "TW_GLMM", "unito_transformer")
 
-# returns one dataframe of all years from one model
-process_model <- function(model_path) {
-  # all directories of the years
-  year_dirs <- list.dirs(file.path(model_path, "cm"), recursive = FALSE)
-  
-  # 
-  greater_zero_data <- year_dirs %>%
-    map(list.files, full.names = TRUE, pattern = "\\.parquet") %>%  # performs list.files on every dir. of year_dirs; returns the full filepath names
-    flatten_chr() %>%                                              # converts list of filepaths into one vector
-    map_dfr(arrow::read_parquet)                                   # performs read_parquet on every element in the vector
-  
-  return(greater_zero_data) # dataframe with all parquet files in year_dirs
+model_names <- c(benchmark_names, submissions_names)
+n_models <- length(model_names)
+
+appendix_names <- paste0("_cm_Y20", c(18, 19, 20, 21, 22, 23, 24))
+subfolder_names <- c(18, 19, 20, 21, 22, 23, 24)
+predictive_samples <- list()
+
+for (m in 1:length(model_names)) {
+  #model_files <- paste0("../Data/predictions/", model_names[m], "/", model_names[m], appendix_names, ".parquet")
+  model_files <- paste0(data_path, "all_available_cm_predictions/", model_names[m], "/cm/window=Y20", subfolder_names, "/", model_names[m], appendix_names, ".parquet")
+  predictive_samples[[m]] <- lapply(model_files, arrow::read_parquet)
+  predictive_samples[[m]] <- bind_rows(predictive_samples[[m]])
 }
+names(predictive_samples) <- model_names
 
-# create list for all models: NEEDS SOME TIME TO COMPUTE
-predictive_samples <- model_dirs %>%
-  set_names(basename(.)) %>% # set names of the list entries, basenames last name of the filepath in model_dirs
-  map(process_model) # perform process_model function
-
-model_names <- names(predictive_samples)
-n_models <- length(predictive_samples)
 
 ### CRPS/Brier-score: visualisation (Lotta)-------------------------------------------------------------------------
 
 ## -----
 # compute crps on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
 ## -----
+
 country_ids <- unique(observations_18_24$country_id)
 actuals_ids <- 457:528 # month_ids for 01-2018, 02-2018, ..., 12-2023
 cm_pairs <- cbind(rep(country_ids, each = length(actuals_ids)),
                   rep(actuals_ids, length(country_ids)))
-
+ 
 models_crps <- list()
 
-for (m in 1:n_models) {
-  crps_m <- apply(cm_pairs, 1, function(cm_pair) {
-    print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
-    true_observation <- observations_18_24 %>%
-      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-      select(outcome)
-    pred_sample <- predictive_samples[[m]] %>%
-      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-      select(outcome)
-    crps_sample(y = unlist(true_observation),
-                dat = unlist(pred_sample))
-  })
-  models_crps[[m]] <- data.frame("country_id" = cm_pairs[,1], 
-                                 "month_id" = cm_pairs[,2],
-                                 "crps" = crps_m)
-}
-names(models_crps) <- model_names
+# for (m in 1:n_models) {
+#   crps_m <- apply(cm_pairs, 1, function(cm_pair) {
+#     print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
+#     true_observation <- observations_18_24 %>%
+#       filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
+#       select(outcome)
+#     pred_sample <- predictive_samples[[m]] %>%
+#       filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
+#       select(outcome)
+#     crps_sample(y = unlist(true_observation),
+#                 dat = unlist(pred_sample))
+#   })
+#   models_crps[[m]] <- data.frame("country_id" = cm_pairs[,1],
+#                                  "month_id" = cm_pairs[,2],
+#                                  "crps" = crps_m)
+# }
+# names(models_crps) <- model_names
 # save(models_crps, file = "output/models_crps.RData")
 load("output/models_crps.RData")
 
@@ -112,7 +108,7 @@ models_predictive_probabilities <- lapply(predictive_samples, function(pred_samp
 
 # merge with observations and compute summands of brier score for each model, month and country
 models_brier <- lapply(models_predictive_probabilities, function(pred_probs) {
-  observations %>% inner_join(pred_probs,
+  observations_18_24 %>% inner_join(pred_probs,
                               by=c("country_id"="country_id", "month_id"="month_id")) %>%
     mutate("actual_conflict" = outcome > 0) %>%
     mutate("brier" = (actual_conflict - predictive_probability)^2) %>%
@@ -135,7 +131,7 @@ observations_17 <- arrow::read_parquet(paste0(data_path,"cm_features.parquet")) 
   filter(month_id %in% 445:456) %>%
   rename(outcome = ged_sb)
 
-observations_17_24 <- rbind(observations_17[,colnames(observations)], observations_18_24) %>%
+observations_17_24 <- rbind(observations_17[,colnames(observations_18_24)], observations_18_24) %>%
   arrange(country_id, month_id)
 
 actual_conflict <- observations_17_24 %>%
@@ -207,7 +203,8 @@ models_crps_conflict_year <- models_crps_conflict %>% select(!c("country_id", "m
 models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] <- models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] / nrow(models_crps_conflict) # compute contributions to average CRPS
 models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] <- models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] / nrow(models_crps_conflict) # compute contributions to average CRPS
 
-colSums(models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] )
+
+
 # create ggplot data frames
 crps_month <- data.frame("CRPS" = unlist(c(models_crps_conflict_month[,2:ncol(models_crps_conflict_month)])),
                          "Situation" = rep(models_crps_conflict_month$situation_month, ncol(models_crps_conflict_month)-1),
@@ -216,6 +213,7 @@ crps_year <- data.frame("CRPS" = unlist(c(models_crps_conflict_year[,2:ncol(mode
                         "Situation" = rep(models_crps_conflict_year$situation_year, ncol(models_crps_conflict_year)-1),
                         "Model" = rep(names(models_crps_conflict_year)[2:ncol(models_crps_conflict_year)], each = 4))
 
+print(colSums(models_crps_conflict_month[4,2:ncol(models_crps_conflict_month)] ))
 
 
 
@@ -224,7 +222,6 @@ create_score_decomposition_plot(crps_month, excluded_models, "CRPS", "previous m
 
 # CRPS decomposition yearly
 create_score_decomposition_plot(crps_year, excluded_models, "CRPS", "previous year", "per conflict situation")
-
 
 
 ## -----
@@ -281,25 +278,11 @@ create_score_decomposition_plot(brier_prev_peace_month, excluded_models, "Brier"
 # Brier score decomposition yearly
 create_score_decomposition_plot(brier_prev_peace_year, excluded_models, "Brier", "previous year", "in case of previous peace", c(0.0, 1))
 
-
-
-
-
-
-
-
-
+#colSums(models_brier_prev_peace_year[,2:ncol(models_crps_conflict_month)] )
 
 
 
 ### distribution of onset probabilities : visualisation (Tobi)-------------------------------------------------------------------------
-
-
-
-
-
-
-
 
 
 
