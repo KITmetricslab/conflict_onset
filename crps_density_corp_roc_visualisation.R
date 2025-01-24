@@ -187,6 +187,11 @@ create_score_decomposition_plot <- function(data, excluded_models, scoringRule, 
   return(p)
 }
 
+
+## -----
+## Excluded models
+## -----
+
 # exclude 3 largest models with insane CRPS values "Neg_Bin_GAM", "P_GAM", "TW_GAM" for all plots
 excluded_models <- c("Neg_Bin_GAM", "P_GAM", "TW_GAM")
 
@@ -283,6 +288,145 @@ create_score_decomposition_plot(brier_prev_peace_year, excluded_models, "Brier",
 
 
 ### distribution of onset probabilities : visualisation (Tobi)-------------------------------------------------------------------------
+
+# dataframe to store onset probabilities in long format
+prob_models_onset_long <- data.frame(
+  model = character(),
+  month_id = integer(),
+  country_id = integer(),
+  predictive_probability = numeric(),
+  situation_month = character(),
+  situation_year = character()
+)
+
+# iterate over all models except the excluded_model in models_predictive_probabilities
+for (model_name in setdiff(names(models_predictive_probabilities), excluded_models)) {
+  # only keep peace situations
+  joined_data <- models_predictive_probabilities[[model_name]] %>%
+    inner_join(conflict_situations, by = c("month_id", "country_id")) %>%
+    mutate(model = model_name) # add model name
+  
+  # add to dataframe
+  prob_models_onset_long <- bind_rows(prob_models_onset_long, joined_data)
+}
+tail(prob_models_onset_long)  # ÜBERPRÜFEN WAS DER LETZTE MONAT IST (NICHT DASS 2024 MIT REIN ZÄHLT)!!!!
+
+## -----
+## Generic plot functions
+## -----
+
+# density for all models -------------
+create_density_all_plot <- function(data, individual, reference, onsetORpeace) {
+  
+  individual_string <- "Individual Models"
+  
+  if(individual == FALSE){
+    individual_string <- "All Models"
+  }
+  
+  p <- ggplot(data, aes(x = predictive_probability)) +
+    geom_density(fill = "#90EE90", alpha = 0.6, size = 0.8) + 
+    labs(
+      title = paste0("Distribution of Fatality Probabilities in case of ", onsetORpeace, " (01-2018 to 12-2023, all countries)"),
+      subtitle = paste0( "Reference: ", reference, ", ", individual_string),
+      x = "onset probability",
+      y = "density"
+    ) +
+    theme_minimal() +
+    theme(
+      strip.text = element_text(size = 10, face = "bold"),
+      plot.title = element_text(face = "bold", size = 14)
+    )
+  
+  if(individual == TRUE){
+    p <- p + facet_wrap(~ model, scales = "free_y")  # facet for each model
+  }
+  
+  return(p)
+}
+
+
+create_density_all_plot(ongoing_peace_prob_month_long,individual = TRUE, "Previous month", "peace")
+
+create_density_all_plot(ongoing_peace_prob_year_long,individual = TRUE, "Previous year", "peace")
+
+
+# density for each model ----------------
+
+
+
+
+# boxplot for each model -----------------
+
+
+## ongoing peace --------------------------------------------------------
+
+# filter for "peace" month
+ongoing_peace_prob_month_long <- prob_models_onset_long %>%
+  filter(situation_month == "peace")
+
+
+ongoing_peace_prob_year_long <- prob_models_onset_long %>%
+  filter(situation_year == "peace")
+
+onset_prob_year_long <- prob_models_onset_long %>%
+  filter(situation_year == "onset")
+
+
+
+ggplot(ongoing_peace_prob_month_long, aes(x = predictive_probability)) +
+  geom_density(fill = "#90EE90", alpha = 0.6, size = 0.8) + 
+  facet_wrap(~ model, scales = "free_y") +  # facet for each model
+  labs(
+    title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
+    subtitle = "Ongoing Peace: 2018-2023",
+    x = "onset probability",
+    y = "density"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# density plot for every observation over all models
+ggplot(ongoing_peace_prob_month_long, aes(x = predictive_probability)) +
+  geom_density(color="black",fill="#90EE90", size = 1, alpha = 0.6) +
+  labs(
+    title = "Distribution of Onset Probabilities 2018-2023: All Models",
+    subtitle = "Ongoing Peace: 2018-2023",
+    x = "onset probability",
+    y = "density"
+  ) +
+  theme_bw()
+
+
+# density for each model
+ggplot(prob_long_ongoing_peace, aes(x = probability_gr_0)) +
+  geom_density(fill = "#90EE90", alpha = 0.6, size = 0.8) + 
+  facet_wrap(~ model, scales = "free_y") +  # facet for each model
+  labs(
+    title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
+    subtitle = "Ongoing Peace: 2018-2023",
+    x = "onset probability",
+    y = "density"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+
+
+
+
+
+
+
+
+
+
 
 
 
