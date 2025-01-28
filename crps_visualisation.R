@@ -102,7 +102,7 @@ models_brier <- lapply(models_predictive_probabilities, function(pred_probs) {
     select("country_id", "month_id", "outcome", "actual_conflict", "predictive_probability", "brier")
 })
 
-#save(models_brier, file = "output/models_brier.RData")
+# save(models_brier, file = "output/models_brier.RData")
 # load("output/models_brier.RData")
 
 
@@ -166,7 +166,7 @@ models_crps_conflict_year <- models_crps_conflict %>% select(!c("country_id", "m
 models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] <- models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] / nrow(models_crps_conflict) # compute contributions to average CRPS
 models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] <- models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] / nrow(models_crps_conflict) # compute contributions to average CRPS
 
-colSums(models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] )
+colSums(models_crps_conflict_month[,2:ncol(models_crps_conflict_month)])
 # create ggplot data frames
 crps_month <- data.frame("CRPS" = unlist(c(models_crps_conflict_month[,2:ncol(models_crps_conflict_month)])),
                          "Situation" = rep(models_crps_conflict_month$situation_month, ncol(models_crps_conflict_month)-1),
@@ -261,3 +261,20 @@ ggplot(brier_prev_peace_year[-which(brier_prev_peace_year$Model %in% c("Neg_Bin_
   ggtitle("Contribution to average Brier score (01-2018 to 12-2023, all countries) in case of previous peace, reference: previous year") +
   scale_fill_manual("legend", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa")) +
   xlab("Contribution to average Brier score per conflict situation")
+
+
+## -----
+# MANUAL CHECKS
+## -----
+# Brier score values for previous peace
+sort(colSums(models_brier_prev_peace_month[,2:ncol(models_brier_prev_peace_month)]))
+sort(colSums(models_brier_prev_peace_year[,2:ncol(models_brier_prev_peace_year)]))
+
+# Poisson baseline: Where do differing Brier scores compared to zero benchmark come from?
+last_comb <- observations %>% mutate("pois_param" = outcome) %>% mutate("pois_month" = month_id+1) %>%
+  select(c("country_id", "pois_month", "pois_param")) %>%
+  inner_join(predictive_samples$last, by=c("country_id"="country_id", "pois_month"="month_id")) %>%
+  filter(pois_param == 0)
+
+sum(last_comb$outcome>0, decreasing = TRUE) # some values are much greater than 0 although 0 should be the parameter...
+sum(last_comb$outcome==0, decreasing = TRUE) # some values are much greater than 0 although 0 should be the parameter...

@@ -29,7 +29,8 @@ library(scoringRules)
 ## ---------
 
 # path to directory on "share-alle"
-data_path <- "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS Data/"
+# data_path <- "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/"
+data_path <- "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/" # MacOS version
 
 # actual data from 2018-2023 in the directory
 files_actuals_from18 <- list.files(data_path, pattern = "cm_actuals_\\d{4}\\.parquet", full.names = TRUE)
@@ -53,7 +54,7 @@ subfolder_names <- c(18, 19, 20, 21, 22, 23, 24)
 predictive_samples <- list()
 
 for (m in 1:length(model_names)) {
-  #model_files <- paste0("../Data/predictions/", model_names[m], "/", model_names[m], appendix_names, ".parquet")
+  # model_files <- paste0("../Data/predictions/", model_names[m], "/", model_names[m], appendix_names, ".parquet")
   model_files <- paste0(data_path, "all_available_cm_predictions/", model_names[m], "/cm/window=Y20", subfolder_names, "/", model_names[m], appendix_names, ".parquet")
   predictive_samples[[m]] <- lapply(model_files, arrow::read_parquet)
   predictive_samples[[m]] <- bind_rows(predictive_samples[[m]])
@@ -115,7 +116,7 @@ models_brier <- lapply(models_predictive_probabilities, function(pred_probs) {
     select("country_id", "month_id", "outcome", "actual_conflict", "predictive_probability", "brier")
 })
 
-#save(models_brier, file = "output/models_brier.RData")
+# save(models_brier, file = "output/models_brier.RData")
 load("output/models_brier.RData")
 
 
@@ -209,7 +210,6 @@ models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] <- models_crps_c
 models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] <- models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] / nrow(models_crps_conflict) # compute contributions to average CRPS
 
 
-
 # create ggplot data frames
 crps_month <- data.frame("CRPS" = unlist(c(models_crps_conflict_month[,2:ncol(models_crps_conflict_month)])),
                          "Situation" = rep(models_crps_conflict_month$situation_month, ncol(models_crps_conflict_month)-1),
@@ -219,7 +219,6 @@ crps_year <- data.frame("CRPS" = unlist(c(models_crps_conflict_year[,2:ncol(mode
                         "Model" = rep(names(models_crps_conflict_year)[2:ncol(models_crps_conflict_year)], each = 4))
 
 print(colSums(models_crps_conflict_month[4,2:ncol(models_crps_conflict_month)] ))
-
 
 
 # CRPS decomposition monthly
@@ -346,11 +345,6 @@ create_density_all_plot <- function(data, individual, reference, onsetORpeace) {
 }
 
 
-create_density_all_plot(ongoing_peace_prob_month_long,individual = TRUE, "Previous month", "peace")
-
-create_density_all_plot(ongoing_peace_prob_year_long,individual = TRUE, "Previous year", "peace")
-
-
 # density for each model ----------------
 
 
@@ -372,6 +366,9 @@ ongoing_peace_prob_year_long <- prob_models_onset_long %>%
 onset_prob_year_long <- prob_models_onset_long %>%
   filter(situation_year == "onset")
 
+
+create_density_all_plot(ongoing_peace_prob_month_long,individual = TRUE, "Previous month", "peace")
+create_density_all_plot(ongoing_peace_prob_year_long,individual = TRUE, "Previous year", "peace")
 
 
 ggplot(ongoing_peace_prob_month_long, aes(x = predictive_probability)) +
@@ -416,24 +413,3 @@ ggplot(prob_long_ongoing_peace, aes(x = probability_gr_0)) +
     strip.text = element_text(size = 10, face = "bold"),
     plot.title = element_text(face = "bold", size = 14)
   )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
