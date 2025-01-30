@@ -32,6 +32,15 @@ library(scoringRules)
 # data_path <- "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/"
 data_path <- "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/" # MacOS version
 
+
+# Erkenne das Betriebssystem
+os <- Sys.info()["sysname"]
+
+# Setze den Pfad abhängig vom Betriebssystem
+data_path <- ifelse(os == "Windows",
+                    "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/",  # Windows
+                    "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/")  # macOS/Linux
+
 # actual data from 2018-2023 in the directory
 files_actuals_from18 <- list.files(data_path, pattern = "cm_actuals_\\d{4}\\.parquet", full.names = TRUE)
 # read all files and bind them into a single data frame
@@ -286,6 +295,11 @@ create_score_decomposition_plot(brier_prev_peace_year, excluded_models, "Brier",
 
 
 
+
+
+
+
+
 ### distribution of onset probabilities : visualisation (Tobi)-------------------------------------------------------------------------
 
 # dataframe to store onset probabilities in long format
@@ -314,19 +328,28 @@ tail(prob_models_onset_long)  # ÜBERPRÜFEN WAS DER LETZTE MONAT IST (NICHT DAS
 ## Generic plot functions
 ## -----
 
-# density for all models -------------
-create_density_all_plot <- function(data, individual, reference, onsetORpeace) {
+# density -------------
+create_density_plot <- function(data, individual, reference, onsetORpeace) {
   
-  individual_string <- "Individual Models"
+  individual_string <- "individual Models"
+  fill_color <- ""
   
   if(individual == FALSE){
-    individual_string <- "All Models"
+    individual_string <- "all Models"
+  }
+  
+  if(onsetORpeace == "peace"){
+    fill_color <- "#4664aa"
+  } else if(onsetORpeace == "onset"){
+    fill_color <- "#df9b1b"
+  } else if(onsetORpeace == "previous peace") {
+    fill_color <- "#8b866f" #  #5F2F4F
   }
   
   p <- ggplot(data, aes(x = predictive_probability)) +
-    geom_density(fill = "#90EE90", alpha = 0.6, size = 0.8) + 
+    geom_density(fill = fill_color, alpha = 0.6, size = 0.8) + 
     labs(
-      title = paste0("Distribution of Fatality Probabilities in case of ", onsetORpeace, " (01-2018 to 12-2023, all countries)"),
+      title = paste0("Distribution of fatality probabilities in case of ", onsetORpeace, " (01-2018 to 12-2023, all countries)"),
       subtitle = paste0( "Reference: ", reference, ", ", individual_string),
       x = "onset probability",
       y = "density"
@@ -344,72 +367,154 @@ create_density_all_plot <- function(data, individual, reference, onsetORpeace) {
   return(p)
 }
 
+create_box_plot <- function(data, individual, reference, onsetORpeace) {
+  
+  individual_string <- "individual Models"
+  fill_color <- ""
+  
+  if(individual == FALSE){
+    individual_string <- "all Models"
+  }
+  
+  if(onsetORpeace == "peace"){
+    fill_color <- "#4664aa"
+  } else if(onsetORpeace == "onset"){
+    fill_color <- "#df9b1b"
+  } else if(onsetORpeace == "previous peace") {
+    fill_color <- "#8b866f" #  #5F2F4F
+  }
+  
+  p <- ggplot(data, aes(x = predictive_probability)) +
+    geom_boxplot(fill = fill_color, alpha = 0.6, color = "black", linewidth = 0.6, outlier.color = "red", outlier.size = 1, width = 0.4) +
+    labs(
+      title = paste0("Boxplot of fatality probabilities in case of ", onsetORpeace, " (01-2018 to 12-2023, all countries)"),
+      subtitle = paste0( "Reference: ", reference, ", ", individual_string),
+      x = "onset probability",
+      y = NULL
+    ) +
+    scale_y_continuous(
+      limits = c(-0.4, 0.4)
+    ) +
+    theme_minimal() +
+    theme(
+      strip.text = element_text(size = 10, face = "bold"),
+      plot.title = element_text(face = "bold", size = 14)
+    )
+  
+  if(individual == TRUE){
+    p <- p + facet_wrap(~ model, scales = "free_y")  # facet for each model
+  }
+  
+  return(p)
+}
 
-# density for each model ----------------
 
 
-
-
-# boxplot for each model -----------------
-
-
-## ongoing peace --------------------------------------------------------
+## -----
+## ongoing peace
+## -----
 
 # filter for "peace" month
 ongoing_peace_prob_month_long <- prob_models_onset_long %>%
   filter(situation_month == "peace")
 
-
 ongoing_peace_prob_year_long <- prob_models_onset_long %>%
   filter(situation_year == "peace")
+
+## density-plots -----
+# previous month
+create_density_plot(ongoing_peace_prob_month_long,individual = TRUE, "previous month", "peace")
+# previous year
+create_density_plot(ongoing_peace_prob_year_long,individual = TRUE, "previous year", "peace")
+
+# ## boxplots -----
+# # previous month
+# create_box_plot(ongoing_peace_prob_month_long,individual = TRUE, "previous month", "peace")
+# # previous year
+# create_box_plot(ongoing_peace_prob_year_long,individual = TRUE, "previous year", "peace")
+
+
+
+## -----
+## onset
+## -----
+
+# filter for "onset" month
+onset_prob_month_long <- prob_models_onset_long %>%
+  filter(situation_month == "onset")
 
 onset_prob_year_long <- prob_models_onset_long %>%
   filter(situation_year == "onset")
 
+## density-plots -----
+# previous month
+create_density_plot(onset_prob_month_long,individual = TRUE, "previous month", "onset")
+# previous year
+create_density_plot(onset_prob_year_long,individual = TRUE, "previous year", "onset")
 
-create_density_all_plot(ongoing_peace_prob_month_long,individual = TRUE, "Previous month", "peace")
-create_density_all_plot(ongoing_peace_prob_year_long,individual = TRUE, "Previous year", "peace")
-
-
-ggplot(ongoing_peace_prob_month_long, aes(x = predictive_probability)) +
-  geom_density(fill = "#90EE90", alpha = 0.6, size = 0.8) + 
-  facet_wrap(~ model, scales = "free_y") +  # facet for each model
-  labs(
-    title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
-    subtitle = "Ongoing Peace: 2018-2023",
-    x = "onset probability",
-    y = "density"
-  ) +
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 10, face = "bold"),
-    plot.title = element_text(face = "bold", size = 14)
-  )
-
-# density plot for every observation over all models
-ggplot(ongoing_peace_prob_month_long, aes(x = predictive_probability)) +
-  geom_density(color="black",fill="#90EE90", size = 1, alpha = 0.6) +
-  labs(
-    title = "Distribution of Onset Probabilities 2018-2023: All Models",
-    subtitle = "Ongoing Peace: 2018-2023",
-    x = "onset probability",
-    y = "density"
-  ) +
-  theme_bw()
+# ## boxplots -----
+# # previous month
+# create_box_plot(onset_prob_month_long,individual = TRUE, "previous month", "onset")
+# # previous year
+# create_box_plot(onset_prob_year_long,individual = TRUE, "previous year", "onset")
 
 
-# density for each model
-ggplot(prob_long_ongoing_peace, aes(x = probability_gr_0)) +
-  geom_density(fill = "#90EE90", alpha = 0.6, size = 0.8) + 
-  facet_wrap(~ model, scales = "free_y") +  # facet for each model
-  labs(
-    title = "Distribution of Onset Probabilities 2018-2023: Individual Models",
-    subtitle = "Ongoing Peace: 2018-2023",
-    x = "onset probability",
-    y = "density"
-  ) +
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 10, face = "bold"),
-    plot.title = element_text(face = "bold", size = 14)
-  )
+
+## -----
+## previous peace 
+## -----
+
+# filter for "onset" or "peace" month
+prev_peace_prob_month_long <- prob_models_onset_long %>%
+  filter(situation_month == "peace" | situation_month == "onset")
+
+prev_peace_prob_year_long <- prob_models_onset_long %>%
+  filter(situation_year == "peace" | situation_year == "onset")
+
+## density-plots -----
+# previous month
+create_density_plot(prev_peace_prob_month_long,individual = TRUE, "previous month", "previous peace")
+# previous year
+create_density_plot(prev_peace_prob_year_long,individual = TRUE, "previous year", "previous peace")
+
+# ## boxplots -----
+# # previous month
+# create_box_plot(prev_peace_prob_month_long,individual = TRUE, "previous month", "previous peace")
+# # previous year
+# create_box_plot(prev_peace_prob_year_long,individual = TRUE, "previous year", "previous peace")
+
+
+
+
+
+
+
+
+
+
+
+
+
+## -----
+## werte des Anteils der ausgewiesenen fatality prob. über x% (aus prev. peace für 1%, 2%, 5%)
+## -----
+
+## -----
+## density decomposition
+## -----
+
+## -----
+## triptych
+## -----
+
+## (reliability diagram) CORP
+
+## ROC
+
+## murphy diagramm
+
+## -----
+## ???
+## -----
+
+
