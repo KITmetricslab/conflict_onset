@@ -28,6 +28,8 @@ library(pbapply)
 library(scoringRules)
 library(reliabilitydiag)
 library(gridExtra)
+library(grid)
+library(precrec)
 
 #devtools::install_github("aijordan/reliabilitydiag")
 
@@ -311,7 +313,7 @@ create_score_decomposition_plot(brier_prev_peace_year, excluded_models, "Brier",
 ### distribution of onset probabilities : visualisation (Tobi)-------------------------------------------------------------------------
 
 # dataframe to store onset probabilities in long format
-prob_models_onset_long <- data.frame(
+prob_models_all_situation_long <- data.frame(
   model = character(),
   month_id = integer(),
   country_id = integer(),
@@ -322,26 +324,29 @@ prob_models_onset_long <- data.frame(
 
 # iterate over all models except the excluded_model in models_predictive_probabilities
 for (model_name in setdiff(names(models_predictive_probabilities), excluded_models)) {
-  # only keep peace situations
+  
   joined_data <- models_predictive_probabilities[[model_name]] %>%
     inner_join(conflict_situations, by = c("month_id", "country_id")) %>%
     mutate(model = model_name) # add model name
   
   # add to dataframe
-  prob_models_onset_long <- bind_rows(prob_models_onset_long, joined_data)
+  prob_models_all_situation_long <- bind_rows(prob_models_all_situation_long, joined_data)
 }
-# tail(prob_models_onset_long)
+# tail(prob_models_all_situation_long)
 
 # add outcome values
-prob_models_onset_long <- prob_models_onset_long %>%
+prob_models_all_situation_long <- prob_models_all_situation_long %>%
   left_join(select(actual_conflict, month_id, country_id, outcome), by = c("month_id","country_id"))
+
+
+#length(which(prob_models_all_situation_long$situation_year == "onset"))/(length(model_names)-3)
 
 
 ## -----
 ## Generic plot functions
 ## -----
 
-# density -------------
+## density -----
 ##
 ## Achtung: dichte wird geglättet (siehe zero modell) -> adjust einstellen
 create_density_plot <- function(data, individual, reference, onsetORpeace) {
@@ -362,7 +367,7 @@ create_density_plot <- function(data, individual, reference, onsetORpeace) {
   }
   
   p <- ggplot(data, aes(x = predictive_probability)) +
-    geom_density(fill = fill_color, alpha = 0.6, size = 0.8, adjust = 0.2) + 
+    geom_density(fill = fill_color, alpha = 0.6, linewidth = 0.8, adjust = 0.2) + 
     labs(
       title = paste0("Distribution of fatality probabilities in case of ", onsetORpeace, " (01-2018 to 12-2023, all countries)"),
       subtitle = paste0( "Reference: ", reference, ", ", individual_string),
@@ -382,6 +387,7 @@ create_density_plot <- function(data, individual, reference, onsetORpeace) {
   return(p)
 }
 
+## boxpolot -----
 create_box_plot <- function(data, individual, reference, onsetORpeace) {
   
   individual_string <- "individual models"
@@ -430,10 +436,10 @@ create_box_plot <- function(data, individual, reference, onsetORpeace) {
 ## -----
 
 # filter for "peace" month
-ongoing_peace_prob_month_long <- prob_models_onset_long %>%
+ongoing_peace_prob_month_long <- prob_models_all_situation_long %>%
   filter(situation_month == "peace")
 
-ongoing_peace_prob_year_long <- prob_models_onset_long %>%
+ongoing_peace_prob_year_long <- prob_models_all_situation_long %>%
   filter(situation_year == "peace")
 
 ## density-plots -----
@@ -455,10 +461,10 @@ create_density_plot(ongoing_peace_prob_year_long,individual = TRUE, "previous ye
 ## -----
 
 # filter for "onset" month
-onset_prob_month_long <- prob_models_onset_long %>%
+onset_prob_month_long <- prob_models_all_situation_long %>%
   filter(situation_month == "onset")
 
-onset_prob_year_long <- prob_models_onset_long %>%
+onset_prob_year_long <- prob_models_all_situation_long %>%
   filter(situation_year == "onset")
 
 ## density-plots -----
@@ -480,17 +486,20 @@ create_density_plot(onset_prob_year_long,individual = TRUE, "previous year", "on
 ## -----
 
 # filter for "onset" or "peace" month
-prev_peace_prob_month_long <- prob_models_onset_long %>%
+prev_peace_prob_month_long <- prob_models_all_situation_long %>%
   filter(situation_month == "peace" | situation_month == "onset")
 
-prev_peace_prob_year_long <- prob_models_onset_long %>%
+prev_peace_prob_year_long <- prob_models_all_situation_long %>%
   filter(situation_year == "peace" | situation_year == "onset")
 
-# ## density-plots -----
-# # previous month
-# create_density_plot(prev_peace_prob_month_long,individual = TRUE, "previous month", "previous peace")
-# # previous year
-# create_density_plot(prev_peace_prob_year_long,individual = TRUE, "previous year", "previous peace")
+## density-plots -----
+# previous month
+density_previous_peace_month_curves <- create_density_plot(prev_peace_prob_month_long,individual = TRUE, "previous month", "previous peace")
+# previous year
+create_density_plot(prev_peace_prob_year_long,individual = TRUE, "previous year", "previous peace")
+
+ggsave("plots_tobi/density_previous_peace_month.png", 
+       plot = density_previous_peace_month_curves, width = 20, height = 12, dpi = 300, bg = "white")
 
 # ## boxplots -----
 # # previous month
@@ -500,16 +509,14 @@ prev_peace_prob_year_long <- prob_models_onset_long %>%
 
 
 
-## -----
-## previous peace density-decomposition-month for predicted prob. > 0!
-## -----
+## previous peace density-decomposition-month for predicted prob. > 0! -----
 # filter dataset
 decomp_prev_peace_prob_month_long <- prev_peace_prob_month_long %>%
   filter(predictive_probability > 0)
 
 # ideal forecast would have everything green for p close to 0 and 
 # everything yellow for high probabilities (p close to 1).
-ggplot(data = decomp_prev_peace_prob_month_long, aes(x = predictive_probability)) +
+density_decomposition_previous_peace_month_curves <- ggplot(data = decomp_prev_peace_prob_month_long, aes(x = predictive_probability)) +
   # "peace" and "onset" density (i.e. "previous peace")
   geom_density(aes(y = after_stat(density), fill = "previous peace"), 
                alpha = 0.9, 
@@ -545,16 +552,35 @@ ggplot(data = decomp_prev_peace_prob_month_long, aes(x = predictive_probability)
   )
 
 
-## -----
-## werte des Anteils der ausgewiesenen fatality prob. über x% (aus prev. peace für 1%, 2%, 5%)
-## -----
+ggsave("plots_tobi/density_decomposition_previous_peace_month.png", 
+       plot = density_decomposition_previous_peace_month_curves, width = 20, height = 12, dpi = 300, bg = "white")
+
+## Proportion of fatality probability exceeding x% (from previous peace for >0%, >1%, >2%, >5%) -----
+thresholds <- c(0, 0.01, 0.02, 0.05)
+
+prob_proportion_exceeding_thresh_df <- prev_peace_prob_month_long %>%
+  group_by(model) %>%
+  summarise(across(predictive_probability, list(
+    `t1` = ~ mean(. > thresholds[1], na.rm = TRUE), # . stands for column predictive_probability
+    `t2` = ~ mean(. > thresholds[2], na.rm = TRUE), # mean is sufficient due to True = 1, False = 0
+    `t3` = ~ mean(. > thresholds[3], na.rm = TRUE),
+    `t4` = ~ mean(. > thresholds[4], na.rm = TRUE)
+  ))) %>%
+  pivot_longer(cols = -model, names_to = "threshold", values_to = "percentage") %>%
+  pivot_wider(names_from = model, values_from = percentage) %>%
+  mutate(threshold = thresholds)
+
+for (i in seq_along(thresholds)) {
+  thresh <- thresholds[i]
+  
+  cat("\nProb. exceeding", thresh, ":\n")
+  print(setNames(colSums(prob_proportion_exceeding_thresh_df[i, 2:ncol(prob_proportion_exceeding_thresh_df)]),
+                 colnames(prob_proportion_exceeding_thresh_df)[2:ncol(prob_proportion_exceeding_thresh_df)]))
+}
 
 
-
-## -----
-## CORP (reliability diagram)
-## -----
-prob_models_onset_long_binary_out <- prob_models_onset_long %>%
+## CORP (reliability diagram) -----
+prev_peace_prob_month_long_binary_out <- prev_peace_prob_month_long %>%
   mutate(outcome = ifelse(outcome >= 1, 1, 0))
 
 # list to store the CORP
@@ -562,15 +588,17 @@ corp_plots_list <- list()
 
 for (model_name in setdiff(names(models_predictive_probabilities), excluded_models)) {
   
-  reliability_data <- prob_models_onset_long_binary_out %>%
+  reliability_data <- prev_peace_prob_month_long_binary_out %>%
     filter(model == model_name)
   
   r <- reliabilitydiag(x = reliability_data$predictive_probability, y = reliability_data$outcome)
   plot <- autoplot(r) + ggplot2::labs(
     title = model_name,
     x = "predicted probability",
-    y = "CEP"
-  ) 
+    y = "CEP") +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 13)
+    )
   
   # hier potentiell noch mehr abspeichern
   corp_plots_list[[model_name]] <- list(plot = plot)
@@ -578,20 +606,63 @@ for (model_name in setdiff(names(models_predictive_probabilities), excluded_mode
 }
 
 # extract all plots from list -> returns list
-plots <- lapply(corp_plots_list, function(x) x$plot)
+plots_corp <- lapply(corp_plots_list, function(x) x$plot)
 
 # plot with grid arrange
-grid.arrange(grobs = plots, nrow = 4, ncol = 5)
+tg_corp <- textGrob('Reliability diagram of predicted fatality prob. in case of previous peace (01-2018 to 12-2023, all countries)', gp = gpar(fontsize = 18, fontface = 'bold'))
+sg_corp <- textGrob('Reference: previous month, individual models', gp = gpar(fontsize = 15))
+margin <- unit(0.5, "line")
+grided_corp <- gridExtra::grid.arrange(grobs = plots_corp, ncol = 5)
+corp_previous_peace_month_curves <- gridExtra::grid.arrange(tg_corp, sg_corp, grided_corp,
+                                                            heights = unit.c(grobHeight(tg_corp) + 1.2*margin, 
+                                                                             grobHeight(sg_corp) + margin, 
+                                                                             unit(1,"null")))
+                                       
+ggsave("plots_tobi/corp_previous_peace_month.png", plot = corp_previous_peace_month_curves, width = 20, height = 12, dpi = 300)
+
+## ROC -----
+# list to store the roc diagrams
+roc_plots_list <- list()
+
+for (model_name in setdiff(names(models_predictive_probabilities), excluded_models)) {
+  
+  roc_data <- prev_peace_prob_month_long_binary_out %>%
+    filter(model == model_name)
+  
+  mm <- mmdata(roc_data$predictive_probability, roc_data$outcome)
+  
+  plot <- autoplot(evalmod(mm), curvetype = "ROC") + 
+    ggplot2::labs(
+      title = model_name,
+      x = "FPR",
+      y = "TPR") +
+    ggplot2::geom_line(size = 1) + 
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 13)
+    ) + 
+    ggplot2::scale_color_manual(values=c("#556B2F"))
+  
+  roc_plots_list[[model_name]] <- list(plot = plot)
+  
+}
+
+# extract all plots from list -> returns list
+plots_roc <- lapply(roc_plots_list, function(x) x$plot)
+
+# plot with grid arrange
+tg_roc <- textGrob('ROC diagram of predicted fatality prob. in case of previous peace (01-2018 to 12-2023, all countries)', gp = gpar(fontsize = 18, fontface = 'bold'))
+sg_roc <- textGrob('Reference: previous month, individual models', gp = gpar(fontsize = 15))
+grided_roc <- gridExtra::grid.arrange(grobs = plots_roc, ncol = 5)
+roc_previous_peace_month_curves <- gridExtra::grid.arrange(tg_roc, sg_roc, grided_roc,
+                                                           heights = unit.c(grobHeight(tg_roc) + 1.2*margin, 
+                                                                            grobHeight(sg_roc) + margin, 
+                                                                            unit(1,"null")))
+                                      
+ggsave("plots_tobi/roc_previous_peace_month.png", plot = roc_previous_peace_month_curves, width = 20, height = 12, dpi = 300)                       
 
 
 
 
-
-
-
-## -----
-## ROC
-## -----
 
 ## -----
 ## murphy diagramm
