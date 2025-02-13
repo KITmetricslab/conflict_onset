@@ -30,9 +30,9 @@ library(reliabilitydiag)
 library(gridExtra)
 library(grid)
 library(precrec)
+library(triptych)
 
 #devtools::install_github("aijordan/reliabilitydiag")
-
 
 ## ---------
 # load observational data (actuals)
@@ -498,8 +498,8 @@ density_previous_peace_month_curves <- create_density_plot(prev_peace_prob_month
 # previous year
 create_density_plot(prev_peace_prob_year_long,individual = TRUE, "previous year", "previous peace")
 
-ggsave("plots_tobi/density_previous_peace_month.png", 
-       plot = density_previous_peace_month_curves, width = 20, height = 12, dpi = 300, bg = "white")
+# ggsave("plots_tobi/density_previous_peace_month.png", 
+#        plot = density_previous_peace_month_curves, width = 20, height = 12, dpi = 300, bg = "white")
 
 # ## boxplots -----
 # # previous month
@@ -552,8 +552,8 @@ density_decomposition_previous_peace_month_curves <- ggplot(data = decomp_prev_p
   )
 
 
-ggsave("plots_tobi/density_decomposition_previous_peace_month.png", 
-       plot = density_decomposition_previous_peace_month_curves, width = 20, height = 12, dpi = 300, bg = "white")
+# ggsave("plots_tobi/density_decomposition_previous_peace_month.png", 
+#        plot = density_decomposition_previous_peace_month_curves, width = 20, height = 12, dpi = 300, bg = "white")
 
 ## Proportion of fatality probability exceeding x% (from previous peace for >0%, >1%, >2%, >5%) -----
 thresholds <- c(0, 0.01, 0.02, 0.05)
@@ -618,7 +618,7 @@ corp_previous_peace_month_curves <- gridExtra::grid.arrange(tg_corp, sg_corp, gr
                                                                              grobHeight(sg_corp) + margin, 
                                                                              unit(1,"null")))
                                        
-ggsave("plots_tobi/corp_previous_peace_month.png", plot = corp_previous_peace_month_curves, width = 20, height = 12, dpi = 300)
+#ggsave("plots_tobi/corp_previous_peace_month.png", plot = corp_previous_peace_month_curves, width = 20, height = 12, dpi = 300)
 
 ## ROC -----
 # list to store the roc diagrams
@@ -658,7 +658,7 @@ roc_previous_peace_month_curves <- gridExtra::grid.arrange(tg_roc, sg_roc, gride
                                                                             grobHeight(sg_roc) + margin, 
                                                                             unit(1,"null")))
                                       
-ggsave("plots_tobi/roc_previous_peace_month.png", plot = roc_previous_peace_month_curves, width = 20, height = 12, dpi = 300)                       
+#ggsave("plots_tobi/roc_previous_peace_month.png", plot = roc_previous_peace_month_curves, width = 20, height = 12, dpi = 300)                       
 
 
 
@@ -667,10 +667,33 @@ ggsave("plots_tobi/roc_previous_peace_month.png", plot = roc_previous_peace_mont
 ## -----
 ## murphy diagramm
 ## -----
+murphy_data <- prev_peace_prob_month_long_binary_out %>%
+  pivot_wider(names_from = model, values_from = predictive_probability) %>%
+  select(5:ncol(.))
 
 
-## -----
-## ???
-## -----
+mr_conflict <- murphy(subset(murphy_data, select = 
+                               c(outcome,
+                                 bodentien_rueter_negbin,
+                                 bodentien_rueter_neuralnet,
+                                 conflictforecast_v2,
+                                 submission_final_omm,
+                                 conflictology,
+                                 last,
+                                 quantile_forecast,
+                                 ShapeFinder,
+                                 zero)), 
+                      y_var = "outcome")
+
+
+df_est_conflict <- estimates(mr_conflict)
+selected_murphy_plot <- ggplot(df_est_conflict) + 
+  geom_path(aes(x = knot, y = mean_score, col = forecast), linewidth = 0.6, alpha = 1) + 
+  labs(title = "Murphy diagram of predicted fatality prob. in case of previous peace (01-2018 to 12-2023, all countries)",
+       subtitle = "Reference: previous month, individual models")
+  
+
+#ggsave("plots_tobi/murphy_previous_peace_month__selected.png", plot = selected_murphy_plot, width = 10, height = 9, dpi = 300)                       
+
 
 
