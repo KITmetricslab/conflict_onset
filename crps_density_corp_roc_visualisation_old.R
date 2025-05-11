@@ -94,6 +94,15 @@ cm_pairs <- cbind(rep(country_ids, each = length(actuals_ids)),
  
 models_crps <- list()
 
+
+
+
+
+
+
+
+
+
 ## CRPS IS CALCULATED FOR WHOLE PREDICTIVE DISTRIBUTION!!!
 
 
@@ -132,7 +141,7 @@ load("output/models_crps.RData")
 # compute Brier score on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
 ## -----
 
-# compute empirical probabilities for the binary onset event
+# compute empirical probabilities
 models_predictive_probabilities <- lapply(predictive_samples, function(pred_sample) {
   pred_sample %>%
     mutate("predicted_conflict" = outcome > 0) %>%
@@ -140,62 +149,36 @@ models_predictive_probabilities <- lapply(predictive_samples, function(pred_samp
     summarise(predictive_probability = mean(predicted_conflict))
 })
 
-# merge models_predictive_probabilities and models_crps into new list "models_scoring_rules"
-models_scoring_rules <- list()
-for (m in 1:n_models) {
-  models_scoring_rules[[m]] <- models_crps[[m]] %>%
-    left_join(models_predictive_probabilities[[m]], by = c("country_id", "month_id")) %>%
-    rename(onset_prob_pred = predictive_probability)
-}
-names(models_scoring_rules) <- model_names
 
-# add the acutal observations to list
-models_scoring_rules <- lapply(models_scoring_rules, function(df) {
-  df %>%
-    left_join(observations_18_24 %>%
-                select(country_id, month_id, actual = outcome),
-              by = c("country_id", "month_id"))
+
+
+
+
+
+
+
+
+
+
+
+
+## BRIER SCORE IS CALCULATED FOR BINARY OUTCOME
+
+
+
+###############################################
+
+# merge with observations and compute summands of brier score for each model, month and country
+models_brier <- lapply(models_predictive_probabilities, function(pred_probs) {
+  observations_18_24 %>% inner_join(pred_probs,
+                              by=c("country_id"="country_id", "month_id"="month_id")) %>%
+    mutate("actual_conflict" = outcome > 0) %>%
+    mutate("brier" = (actual_conflict - predictive_probability)^2) %>%
+    select("country_id", "month_id", "outcome", "actual_conflict", "predictive_probability", "brier")
 })
 
-# compute summands of brier score for each model, month and country
-models_scoring_rules <- lapply(models_scoring_rules, function(df) {
-  df %>%
-    mutate(
-      actual_conflict = actual > 0,
-      brier_onset = (actual_conflict - onset_prob_pred)^2
-    )
-})
-
-
-
-rm(models_predictive_probabilities, models_brier, models_crps)
-
-
-
-
-## -----
-# compute log-score on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
-## -----
-# modified log-score to cure log(0)
-safe_log_score <- function(actual, p, eps = 1e-12) {
-  p_clipped <- pmin(pmax(p, eps), 1 - eps)
-  return(- (actual * log(p_clipped) +
-              (1 - actual) * log(1 - p_clipped)))
-}
-
-# compute log-scores
-models_scoring_rules <- lapply(models_scoring_rules, function(df) {
-  df %>%
-    mutate(
-      log_score_onset = - (actual_conflict * log(onset_prob_pred) +
-                             (1 - actual_conflict) * log(1 - onset_prob_pred)),
-      log_score_eps_onset = safe_log_score(actual_conflict, onset_prob_pred)
-    )
-})
-
-
-
-
+# save(models_brier, file = "output/models_brier.RData")
+load("output/models_brier.RData")
 
 
 ## -----
@@ -274,15 +257,10 @@ create_score_decomposition_plot <- function(data, excluded_models, scoringRule, 
 # exclude 3 largest models with insane CRPS values "Neg_Bin_GAM", "P_GAM", "TW_GAM" for all plots
 excluded_models <- c("Neg_Bin_GAM", "P_GAM", "TW_GAM")
 
-
-
 ## -----
 ## Plot CRPS values by conflict situation
 ## -----
-models_crps_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "crps")) %>%
-  reduce(left_join, c("country_id", "month_id"))
-
-
+models_crps_conflict <- models_crps %>% reduce(left_join, c("country_id", "month_id"))
 names(models_crps_conflict) <- c("country_id", "month_id", model_names)
 models_crps_conflict <- list(models_crps_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
 
@@ -314,10 +292,8 @@ create_score_decomposition_plot(crps_year, excluded_models, "CRPS", "previous ye
 ## -----
 ## Plot Brier values by conflict situation
 ## -----
-models_brier_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "brier_onset")) %>%
+models_brier_conflict <- lapply(models_brier, function(m) m %>% select("country_id", "month_id", "brier")) %>%
   reduce(left_join, c("country_id", "month_id"))
-
-
 names(models_brier_conflict) <- c("country_id", "month_id", model_names)
 models_brier_conflict <- list(models_brier_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
 
@@ -375,100 +351,6 @@ create_score_decomposition_plot(brier_prev_peace_year, excluded_models, "Brier",
 
 
 
-## -----
-## Plot log-score values by conflict situation for the onset problem (y \in {0,1})
-## -----
-models_logscore_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "log_score_eps_onset")) %>%
-  reduce(left_join, c("country_id", "month_id"))
-
-
-names(models_logscore_conflict) <- c("country_id", "month_id", model_names)
-models_logscore_conflict <- list(models_logscore_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
-
-models_logscore_conflict_month <- models_logscore_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum)
-models_logscore_conflict_year <- models_logscore_conflict %>% select(!c("country_id", "month_id", "situation_month")) %>% group_by(situation_year) %>% summarise_all(sum)
-
-models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] <- models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] / nrow(models_logscore_conflict) # compute contributions to average CRPS
-models_logscore_conflict_year[,2:ncol(models_logscore_conflict_year)] <- models_logscore_conflict_year[,2:ncol(models_logscore_conflict_year)] / nrow(models_logscore_conflict) # compute contributions to average CRPS
-
-
-# create ggplot data frames
-logscore_month <- data.frame("logscore" = unlist(c(models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)])),
-                         "Situation" = rep(models_logscore_conflict_month$situation_month, ncol(models_logscore_conflict_month)-1),
-                         "Model" = rep(names(models_logscore_conflict_month)[2:ncol(models_logscore_conflict_month)], each = 4))
-logscore_year <- data.frame("logscore" = unlist(c(models_logscore_conflict_year[,2:ncol(models_logscore_conflict_year)])),
-                        "Situation" = rep(models_logscore_conflict_year$situation_year, ncol(models_logscore_conflict_year)-1),
-                        "Model" = rep(names(models_logscore_conflict_year)[2:ncol(models_logscore_conflict_year)], each = 4))
-
-print(colSums(models_logscore_conflict_month[4,2:ncol(models_logscore_conflict_month)] ))
-
-
-# CRPS decomposition monthly
-create_score_decomposition_plot(logscore_month, excluded_models, "logscore", "previous month", "per conflict situation")
-
-# CRPS decomposition yearly
-create_score_decomposition_plot(logscore_year, excluded_models, "logscore", "previous year", "per conflict situation")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ### distribution of onset probabilities : visualisation (Tobi)-------------------------------------------------------------------------
 
@@ -477,15 +359,15 @@ prob_models_all_situation_long <- data.frame(
   model = character(),
   month_id = integer(),
   country_id = integer(),
-  onset_prob_pred = numeric(),
+  predictive_probability = numeric(),
   situation_month = character(),
   situation_year = character()
 )
 
 # iterate over all models except the excluded_model in models_predictive_probabilities
-for (model_name in setdiff(names(models_scoring_rules), excluded_models)) {
+for (model_name in setdiff(names(models_predictive_probabilities), excluded_models)) {
   
-  joined_data <- models_scoring_rules[[model_name]] %>%
+  joined_data <- models_predictive_probabilities[[model_name]] %>%
     inner_join(conflict_situations, by = c("month_id", "country_id")) %>%
     mutate(model = model_name) # add model name
   
@@ -493,6 +375,10 @@ for (model_name in setdiff(names(models_scoring_rules), excluded_models)) {
   prob_models_all_situation_long <- bind_rows(prob_models_all_situation_long, joined_data)
 }
 # tail(prob_models_all_situation_long)
+
+# add outcome values
+prob_models_all_situation_long <- prob_models_all_situation_long %>%
+  left_join(select(actual_conflict, month_id, country_id, outcome), by = c("month_id","country_id"))
 
 
 #length(which(prob_models_all_situation_long$situation_year == "onset"))/(length(model_names)-3)
@@ -522,7 +408,7 @@ create_density_plot <- function(data, individual, reference, onsetORpeace) {
     fill_color <- "#556B2F" #  #5F2F4F
   }
   
-  p <- ggplot(data, aes(x = onset_prob_pred)) +
+  p <- ggplot(data, aes(x = predictive_probability)) +
     geom_density(fill = fill_color, alpha = 0.6, linewidth = 0.8, adjust = 0.2) + 
     labs(
       title = paste0("Distribution of fatality probabilities in case of ", onsetORpeace, " (01-2018 to 12-2023, all countries)"),
@@ -561,7 +447,7 @@ create_box_plot <- function(data, individual, reference, onsetORpeace) {
     fill_color <- "#556B2F" #  #5F2F4F
   }
   
-  p <- ggplot(data, aes(x = onset_prob_pred)) +
+  p <- ggplot(data, aes(x = predictive_probability)) +
     geom_boxplot(fill = fill_color, alpha = 0.6, color = "black", linewidth = 0.6, outlier.color = "red", outlier.size = 1, width = 0.4) +
     labs(
       title = paste0("Boxplot of fatality probabilities in case of ", onsetORpeace, " (01-2018 to 12-2023, all countries)"),
@@ -668,11 +554,11 @@ create_density_plot(prev_peace_prob_year_long,individual = TRUE, "previous year"
 ## previous peace density-decomposition-month for predicted prob. > 0! -----
 # filter dataset
 decomp_prev_peace_prob_month_long <- prev_peace_prob_month_long %>%
-  filter(onset_prob_pred > 0)
+  filter(predictive_probability > 0)
 
 # ideal forecast would have everything green for p close to 0 and 
 # everything yellow for high probabilities (p close to 1).
-density_decomposition_previous_peace_month_curves <- ggplot(data = decomp_prev_peace_prob_month_long, aes(x = onset_prob_pred)) +
+density_decomposition_previous_peace_month_curves <- ggplot(data = decomp_prev_peace_prob_month_long, aes(x = predictive_probability)) +
   # "peace" and "onset" density (i.e. "previous peace")
   geom_density(aes(y = after_stat(density), fill = "previous peace"), 
                alpha = 0.9, 
@@ -716,7 +602,7 @@ thresholds <- c(0, 0.01, 0.02, 0.05)
 
 prob_proportion_exceeding_thresh_df <- prev_peace_prob_month_long %>%
   group_by(model) %>%
-  summarise(across(onset_prob_pred, list(
+  summarise(across(predictive_probability, list(
     `t1` = ~ mean(. > thresholds[1], na.rm = TRUE), # . stands for column predictive_probability
     `t2` = ~ mean(. > thresholds[2], na.rm = TRUE), # mean is sufficient due to True = 1, False = 0
     `t3` = ~ mean(. > thresholds[3], na.rm = TRUE),
@@ -736,18 +622,18 @@ for (i in seq_along(thresholds)) {
 
 
 ## CORP (reliability diagram) -----
-prev_peace_prob_month_long_binary_actual <- prev_peace_prob_month_long %>%
-  mutate(actual = ifelse(actual >= 1, 1, 0))
+prev_peace_prob_month_long_binary_out <- prev_peace_prob_month_long %>%
+  mutate(outcome = ifelse(outcome >= 1, 1, 0))
 
 # list to store the CORP
 corp_plots_list <- list()
 
-for (model_name in setdiff(names(models_scoring_rules), excluded_models)) {
+for (model_name in setdiff(names(models_predictive_probabilities), excluded_models)) {
   
-  reliability_data <- prev_peace_prob_month_long_binary_actual %>%
+  reliability_data <- prev_peace_prob_month_long_binary_out %>%
     filter(model == model_name)
   
-  r <- reliabilitydiag(x = reliability_data$onset_prob_pred, y = reliability_data$actual)
+  r <- reliabilitydiag(x = reliability_data$predictive_probability, y = reliability_data$outcome)
   plot <- autoplot(r) + ggplot2::labs(
     title = model_name,
     x = "predicted probability",
@@ -780,12 +666,12 @@ corp_previous_peace_month_curves <- gridExtra::grid.arrange(tg_corp, sg_corp, gr
 # list to store the roc diagrams
 roc_plots_list <- list()
 
-for (model_name in setdiff(names(models_scoring_rules), excluded_models)) {
+for (model_name in setdiff(names(models_predictive_probabilities), excluded_models)) {
   
-  roc_data <- prev_peace_prob_month_long_binary_actual %>%
+  roc_data <- prev_peace_prob_month_long_binary_out %>%
     filter(model == model_name)
   
-  mm <- mmdata(roc_data$onset_prob_pred, roc_data$actual)
+  mm <- mmdata(roc_data$predictive_probability, roc_data$outcome)
   
   plot <- autoplot(evalmod(mm), curvetype = "ROC") + 
     ggplot2::labs(
@@ -818,16 +704,18 @@ roc_previous_peace_month_curves <- gridExtra::grid.arrange(tg_roc, sg_roc, gride
 
 
 
+
+
 ## -----
 ## murphy diagramm
 ## -----
-murphy_data <- prev_peace_prob_month_long_binary_actual %>%
-  select(1:6,8) %>%
-  pivot_wider(names_from = model, values_from = onset_prob_pred) %>%
-  select(5:ncol(.)) 
+murphy_data <- prev_peace_prob_month_long_binary_out %>%
+  pivot_wider(names_from = model, values_from = predictive_probability) %>%
+  select(5:ncol(.))
+
 
 mr_conflict <- murphy(subset(murphy_data, select = 
-                               c(actual,
+                               c(outcome,
                                  bodentien_rueter_negbin,
                                  bodentien_rueter_neuralnet,
                                  conflictforecast_v2,
@@ -837,7 +725,7 @@ mr_conflict <- murphy(subset(murphy_data, select =
                                  quantile_forecast,
                                  ShapeFinder,
                                  zero)), 
-                      y_var = "actual")
+                      y_var = "outcome")
 
 
 df_est_conflict <- estimates(mr_conflict)
@@ -845,14 +733,13 @@ selected_murphy_plot <- ggplot(df_est_conflict) +
   geom_path(aes(x = knot, y = mean_score, col = forecast), linewidth = 0.6, alpha = 1) + 
   labs(title = "Murphy diagram of predicted fatality prob. in case of previous peace (01-2018 to 12-2023, all countries)",
        subtitle = "Reference: previous month, individual models")
-selected_murphy_plot
+  
 
 #ggsave("plots_tobi/murphy_previous_peace_month__selected.png", plot = selected_murphy_plot, width = 10, height = 9, dpi = 300)                       
 
 
 
-
-
+selected_murphy_plot
 
 
 
