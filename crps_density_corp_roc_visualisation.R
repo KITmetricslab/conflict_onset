@@ -859,3 +859,216 @@ selected_murphy_plot
 
 
 
+
+
+
+
+##############
+# MSC-DSC-plots
+##############
+
+## MSC-DSC Plots
+decomposition_results <- map2(
+  .x = models_scoring_rules,
+  .y = names(models_scoring_rules),
+  .f = function(df, model_name) {
+    # caclulate MSC-DSC-UNC 
+    #@param score 
+    # A string specifying the score function.
+    #'   One of: `"Brier_score"` (default), `"log_score"`, `"MR_score"`.
+    result <- mcbdsc(df %>% select(onset_prob_pred), y = df$actual_conflict, score="Brier_score")
+    
+    # Extrahiere estimates + Modellname
+    estimates(result) %>%
+      mutate(model = model_name)
+  }
+)
+
+## important remark for BRIER score:
+# UNC = variance of X~Ber(p=E(y)=mean(y)) -> p(1-p)
+#p <- models_scoring_rules$boot_240$actual_conflict
+#mean(p)*(1-mean(p))
+
+# combine to one dataframe
+brier_score_decomposition <- bind_rows(decomposition_results) %>%
+  select(model, mean_score, MCB, DSC, UNC)
+
+# data frame with format for the barchart
+brier_score_decomposition_long <- brier_score_decomposition %>%
+  arrange(mean_score) %>%  # sort by mean_score
+  pivot_longer(cols = c(mean_score, MCB, DSC, UNC),
+               names_to = "component",
+               values_to = "value") %>%
+  mutate(class = case_when(
+    component %in% c("mean_score", "MCB") ~ "BRIER_MCB",
+    component %in% c("DSC", "UNC") ~ "UNC_DSC"
+  )) %>%
+  select(model, class, component, value)
+
+brier_score_decomposition_long <- brier_score_decomposition_long %>%
+  mutate(model = factor(model, levels = unique(model[component == "mean_score"])))
+
+
+ggplot(brier_score_decomposition_long) +
+  geom_bar(aes(x = class, y = value, fill = component),
+           position = "stack",
+           stat = "identity") +
+  facet_grid(~ model, switch = "x") +
+  theme(strip.placement = "outside",
+        strip.background = element_rect(fill = NA, color = "white"),
+        panel.spacing = unit(-.01,"cm"))
+
+
+
+
+
+
+
+
+
+# Balkendiagramm: horizontale, gruppierte Balken
+ggplot(brier_score_decomposition_long) +
+  geom_bar(
+    aes(x = value, y = model, fill = component),
+    stat = "identity",
+    position = "dodge"  # nebeneinander statt gestapelt
+  ) +
+  labs(x = "value", y = "model") +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    legend.position = "right"
+  )
+
+
+ggplot(brier_score_decomposition_long) +
+  geom_bar(
+    aes(x = value, y = model, fill = component, group = class),
+    stat = "identity",
+    position = position_stack(vjust = 0.5),  # innerhalb jeder Klasse: stapeln
+    width = 0.6
+  ) +
+  labs(x = "Wert", y = "Modell", fill = "Komponente") +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 7),
+    legend.position = "right"
+  )
+
+
+
+
+
+# Hilfsdaten: Modellreihenfolge nach mean_score
+levs <- brier_score_decomposition_long %>%
+  filter(component == "mean_score") %>%
+  arrange(desc(value)) %>%
+  pull(model)
+
+# Plotdaten vorbereiten
+plot_data <- brier_score_decomposition_long %>%
+  mutate(
+    flag = class == "UNC_DSC",  # TRUE für DSC/UNC, FALSE für mean_score/MCB
+    model = factor(model, levels = levs, ordered = TRUE)
+  )
+
+# Plot
+ggplot(plot_data, aes(x = flag, y = value, fill = component)) +
+  geom_bar(stat = "identity") +
+  facet_grid(model ~ ., switch = "y") +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("DSC" = "red", "UNC" = "tomato", "MCB" = "cyan3", "mean_score" = "skyblue"),
+    name = ""
+  ) +
+  theme_classic() +
+  theme(
+    panel.spacing = unit(0, "points"),
+    strip.background = element_blank(),
+    strip.placement = "outside",
+    strip.text.y.left = element_text(angle = 0, hjust = 1),
+    axis.text.y = element_blank(),
+    axis.ticks.length.y = unit(0, "points"),
+    axis.title = element_blank(),
+    legend.position = "bottom",
+    panel.grid.major.x = element_line()
+  )
+
+
+
+ggplot(plot_data, aes(x = flag, y = value, fill = component)) +
+  geom_bar(stat = "identity", width = 1) +  # dickere Balken
+  geom_text(
+    aes(label = component),
+    stat = "identity",
+    position = position_stack(vjust = 0.5),
+    color = "white", size = 3
+  ) +
+  facet_grid(model ~ ., switch = "y", space = "free", scales = "free_y") +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("DSC" = "red", "UNC" = "tomato", "MCB" = "cyan3", "mean_score" = "skyblue"),
+    name = NULL
+  ) +
+  theme_classic() +
+  theme(
+    panel.spacing = unit(0, "pt"),  # kein Abstand zwischen Panels
+    strip.background = element_blank(),
+    strip.placement = "outside",
+    strip.text.y.left = element_text(angle = 0, hjust = 1),
+    axis.text.y = element_blank(),
+    axis.ticks.length.y = unit(0, "pt"),
+    axis.title = element_blank(),
+    legend.position = "none",  # Legende entfernen, da Beschriftung direkt in Balken
+    panel.grid.major.x = element_line()
+  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
