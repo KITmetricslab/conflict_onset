@@ -31,6 +31,7 @@ library(gridExtra)
 library(grid)
 library(precrec)
 library(triptych)
+library(ggpattern)
 
 #devtools::install_github("aijordan/reliabilitydiag")
 
@@ -867,8 +868,7 @@ selected_murphy_plot
 # MSC-DSC-plots
 ##############
 
-## MSC-DSC Plots
-decomposition_results <- map2(
+brier_decomposition_results <- map2(
   .x = models_scoring_rules,
   .y = names(models_scoring_rules),
   .f = function(df, model_name) {
@@ -890,23 +890,24 @@ decomposition_results <- map2(
 #mean(p)*(1-mean(p))
 
 # combine to one dataframe
-brier_score_decomposition <- bind_rows(decomposition_results) %>%
-  select(model, mean_score, MCB, DSC, UNC)
+brier_score_decomposition <- bind_rows(brier_decomposition_results) %>%
+  select(model, mean_score, MCB, DSC, UNC) %>%
+  rename(MeanScore = mean_score)
 
 # data frame with format for the barchart
 brier_score_decomposition_long <- brier_score_decomposition %>%
-  arrange(mean_score) %>%  # sort by mean_score
-  pivot_longer(cols = c(mean_score, MCB, DSC, UNC),
+  arrange(MeanScore) %>%  # sort by MeanScore
+  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC),
                names_to = "component",
                values_to = "value") %>%
   mutate(class = case_when(
-    component %in% c("mean_score", "MCB") ~ "BRIER_MCB",
-    component %in% c("DSC", "UNC") ~ "UNC_DSC"
+    component %in% c("MeanScore", "DSC") ~ "SCORE_DSC",
+    component %in% c("MCB", "UNC") ~ "MCB_UNC"
   )) %>%
   select(model, class, component, value)
 
 brier_score_decomposition_long <- brier_score_decomposition_long %>%
-  mutate(model = factor(model, levels = unique(model[component == "mean_score"])))
+  mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
 
 
 ggplot(brier_score_decomposition_long) +
@@ -926,61 +927,37 @@ ggplot(brier_score_decomposition_long) +
 
 
 
-# Balkendiagramm: horizontale, gruppierte Balken
-ggplot(brier_score_decomposition_long) +
-  geom_bar(
-    aes(x = value, y = model, fill = component),
-    stat = "identity",
-    position = "dodge"  # nebeneinander statt gestapelt
-  ) +
-  labs(x = "value", y = "model") +
-  theme_minimal() +
-  theme(
-    axis.text.y = element_text(size = 8),
-    legend.position = "right"
-  )
-
-
-ggplot(brier_score_decomposition_long) +
-  geom_bar(
-    aes(x = value, y = model, fill = component, group = class),
-    stat = "identity",
-    position = position_stack(vjust = 0.5),  # innerhalb jeder Klasse: stapeln
-    width = 0.6
-  ) +
-  labs(x = "Wert", y = "Modell", fill = "Komponente") +
-  theme_minimal() +
-  theme(
-    axis.text.y = element_text(size = 7),
-    legend.position = "right"
-  )
 
 
 
-
-
-# Hilfsdaten: Modellreihenfolge nach mean_score
-levs <- brier_score_decomposition_long %>%
-  filter(component == "mean_score") %>%
+# dataset for model orderbased on MeanScore
+brier_levs <- brier_score_decomposition_long %>%
+  filter(component == "MeanScore") %>%
   arrange(desc(value)) %>%
   pull(model)
 
-# Plotdaten vorbereiten
-plot_data <- brier_score_decomposition_long %>%
+# data for the plot
+brier_plot_data <- brier_score_decomposition_long %>%
   mutate(
-    flag = class == "UNC_DSC",  # TRUE für DSC/UNC, FALSE für mean_score/MCB
-    model = factor(model, levels = levs, ordered = TRUE)
+    flag = class == "MCB_UNC",  
+    model = factor(model, levels = brier_levs, ordered = TRUE)
+  )
+
+brier_plot_data <- brier_plot_data %>%
+  mutate(
+    component = factor(component, levels = c("UNC", "MCB", "DSC", "MeanScore"))
   )
 
 # Plot
-ggplot(plot_data, aes(x = flag, y = value, fill = component)) +
-  geom_bar(stat = "identity") +
+ggplot(brier_plot_data, aes(x = flag, y = value, fill = component)) +
+  geom_bar(stat = "identity", position = "stack", color = "black", size = 0.2, width = 1) +
   facet_grid(model ~ ., switch = "y") +
   coord_flip() +
   scale_fill_manual(
-    values = c("DSC" = "red", "UNC" = "tomato", "MCB" = "cyan3", "mean_score" = "skyblue"),
+    values = c("DSC" = "lightgreen", "UNC" = "#e0e4e6", "MCB" = "#19a8d6", "MeanScore" = "#FF4D4D"),
     name = ""
   ) +
+  labs(title = "Mean Brier Score Decomposition for Onset Prediction (01-2018 to 12-2023, all countries)") + 
   theme_classic() +
   theme(
     panel.spacing = unit(0, "points"),
@@ -991,40 +968,100 @@ ggplot(plot_data, aes(x = flag, y = value, fill = component)) +
     axis.ticks.length.y = unit(0, "points"),
     axis.title = element_blank(),
     legend.position = "bottom",
-    panel.grid.major.x = element_line()
+    panel.grid.major.x = element_line(),
+    plot.title = element_text(face = "bold", size = 14)
   )
 
 
 
-ggplot(plot_data, aes(x = flag, y = value, fill = component)) +
-  geom_bar(stat = "identity", width = 1) +  # dickere Balken
-  geom_text(
-    aes(label = component),
-    stat = "identity",
-    position = position_stack(vjust = 0.5),
-    color = "white", size = 3
-  ) +
-  facet_grid(model ~ ., switch = "y", space = "free", scales = "free_y") +
+### new one ####################################################################
+
+
+#########################################################################
+
+# neue spalte in brier_score_decomposition mit wert von MeanScore hinzufügen und "abstand" oder ähnliches benennen diese in gruppe mit dsc packen
+# soll nicht in legende auftauchen
+
+# abstand zwischen dickem balken und den zwei dünnen?
+
+
+# data frame with format for the barchart
+brier_score_decomposition_horizontal <- brier_score_decomposition %>%
+  arrange(MeanScore) %>%  # sort by MeanScore
+  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC),
+               names_to = "component",
+               values_to = "value") %>%
+  mutate(class = case_when(
+    component %in% c("MeanScore") ~ "SCORE",
+    component %in% c("MCB", "UNC") ~ "MCB_UNC",
+    component %in% c("DSC") ~ "DSC" 
+  )) %>%
+  select(model, class, component, value)
+
+brier_score_decomposition_horizontal <- brier_score_decomposition_horizontal %>%
+  mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
+
+
+# dataset for model orderbased on MeanScore
+brier_levs <- brier_score_decomposition_horizontal %>%
+  filter(component == "MeanScore") %>%
+  arrange(desc(value)) %>%
+  pull(model)
+
+# data for the plot
+brier_plot_data_horizontal <- brier_score_decomposition_horizontal %>%
+  mutate(
+    class_group = case_when(
+      class == "MCB_UNC"   ~ 1,
+      class == "DSC"       ~ 2,
+      class == "SCORE" ~ 3
+    ),  
+    model = factor(model, levels = brier_levs, ordered = TRUE)
+  )
+
+brier_plot_data_horizontal <- brier_plot_data_horizontal %>%
+  mutate(
+    component = factor(component, levels = c("UNC", "MCB", "DSC", "MeanScore"))
+  )
+
+brier_plot_data_horizontal <- brier_plot_data_horizontal %>%
+  mutate(
+    breite = case_when(
+      class_group == 3 ~ 2,
+      class_group %in% c(1, 2) ~ 1
+    )
+  )
+
+# brier_plot_data_horizontal <- brier_plot_data_horizontal %>%
+#   slice(1:(n() - 40))
+
+
+
+ggplot(brier_plot_data_horizontal, aes(x = class_group, y = value, fill = component)) +
+  geom_bar(stat = "identity", position = "stack", size = 0.2, width = brier_plot_data_horizontal$breite) +
+  facet_grid(model ~ ., switch = "y") +
   coord_flip() +
   scale_fill_manual(
-    values = c("DSC" = "red", "UNC" = "tomato", "MCB" = "cyan3", "mean_score" = "skyblue"),
-    name = NULL
+    values = c("DSC" = "lightgreen", "UNC" = "#e0e4e6", "MCB" = "#19a8d6", "MeanScore" = "#FF4D4D"),
+    ###################################
+    breaks = c("DSC", "UNC", "MCB"), 
+    ##################################
+    name = ""
   ) +
+  labs(title = "Mean Brier Score Decomposition for Onset Prediction (01-2018 to 12-2023, all countries)") + 
   theme_classic() +
   theme(
-    panel.spacing = unit(0, "pt"),  # kein Abstand zwischen Panels
+    panel.spacing = unit(0, "points"),
     strip.background = element_blank(),
     strip.placement = "outside",
     strip.text.y.left = element_text(angle = 0, hjust = 1),
     axis.text.y = element_blank(),
-    axis.ticks.length.y = unit(0, "pt"),
+    axis.ticks.length.y = unit(0, "points"),
     axis.title = element_blank(),
-    legend.position = "none",  # Legende entfernen, da Beschriftung direkt in Balken
-    panel.grid.major.x = element_line()
+    legend.position = "bottom",
+    panel.grid.major.x = element_blank(),
+    plot.title = element_text(face = "bold", size = 14)
   )
-
-
-
 
 
 
