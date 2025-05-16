@@ -854,16 +854,6 @@ selected_murphy_plot
 
 
 
-
-
-
-
-
-
-
-
-
-
 ##############
 # MSC-DSC-plots
 ##############
@@ -894,97 +884,11 @@ brier_score_decomposition <- bind_rows(brier_decomposition_results) %>%
   select(model, mean_score, MCB, DSC, UNC) %>%
   rename(MeanScore = mean_score)
 
-# data frame with format for the barchart
-brier_score_decomposition_long <- brier_score_decomposition %>%
-  arrange(MeanScore) %>%  # sort by MeanScore
-  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC),
-               names_to = "component",
-               values_to = "value") %>%
-  mutate(class = case_when(
-    component %in% c("MeanScore", "DSC") ~ "SCORE_DSC",
-    component %in% c("MCB", "UNC") ~ "MCB_UNC"
-  )) %>%
-  select(model, class, component, value)
-
-brier_score_decomposition_long <- brier_score_decomposition_long %>%
-  mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
-
-
-ggplot(brier_score_decomposition_long) +
-  geom_bar(aes(x = class, y = value, fill = component),
-           position = "stack",
-           stat = "identity") +
-  facet_grid(~ model, switch = "x") +
-  theme(strip.placement = "outside",
-        strip.background = element_rect(fill = NA, color = "white"),
-        panel.spacing = unit(-.01,"cm"))
-
-
-
-
-
-
-
-
-
-
-
-
-# dataset for model orderbased on MeanScore
-brier_levs <- brier_score_decomposition_long %>%
-  filter(component == "MeanScore") %>%
-  arrange(desc(value)) %>%
-  pull(model)
-
-# data for the plot
-brier_plot_data <- brier_score_decomposition_long %>%
-  mutate(
-    flag = class == "MCB_UNC",  
-    model = factor(model, levels = brier_levs, ordered = TRUE)
-  )
-
-brier_plot_data <- brier_plot_data %>%
-  mutate(
-    component = factor(component, levels = c("UNC", "MCB", "DSC", "MeanScore"))
-  )
-
-# Plot
-ggplot(brier_plot_data, aes(x = flag, y = value, fill = component)) +
-  geom_bar(stat = "identity", position = "stack", color = "black", size = 0.2, width = 1) +
-  facet_grid(model ~ ., switch = "y") +
-  coord_flip() +
-  scale_fill_manual(
-    values = c("DSC" = "lightgreen", "UNC" = "#e0e4e6", "MCB" = "#19a8d6", "MeanScore" = "#FF4D4D"),
-    name = ""
-  ) +
-  labs(title = "Mean Brier Score Decomposition for Onset Prediction (01-2018 to 12-2023, all countries)") + 
-  theme_classic() +
-  theme(
-    panel.spacing = unit(0, "points"),
-    strip.background = element_blank(),
-    strip.placement = "outside",
-    strip.text.y.left = element_text(angle = 0, hjust = 1),
-    axis.text.y = element_blank(),
-    axis.ticks.length.y = unit(0, "points"),
-    axis.title = element_blank(),
-    legend.position = "bottom",
-    panel.grid.major.x = element_line(),
-    plot.title = element_text(face = "bold", size = 14)
-  )
-
-
-
-### new one ####################################################################
-
-
-#########################################################################
-
-
-brier_score_decomposition_addit_variable <- brier_score_decomposition %>%
+brier_score_decomposition_barplot <- brier_score_decomposition %>%
   mutate(score_invisible = MeanScore, gap = 0)
 
 # data frame with format for the barchart
-brier_score_decomposition_horizontal <- brier_score_decomposition_addit_variable %>%
+brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
   arrange(MeanScore) %>%  # sort by MeanScore
   pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap),
                names_to = "component",
@@ -997,18 +901,18 @@ brier_score_decomposition_horizontal <- brier_score_decomposition_addit_variable
   )) %>%
   select(model, class, component, value)
 
-brier_score_decomposition_horizontal <- brier_score_decomposition_horizontal %>%
+brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
   mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
 
 
 # dataset for model orderbased on MeanScore
-brier_levs <- brier_score_decomposition_horizontal %>%
+brier_levs <- brier_score_decomposition_barplot %>%
   filter(component == "MeanScore") %>%
   arrange(desc(value)) %>%
   pull(model)
 
 # data for the plot
-brier_plot_data_horizontal <- brier_score_decomposition_horizontal %>%
+brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
   mutate(
     class_group = case_when(
       class == "MCB_UNC"   ~ 1,
@@ -1019,27 +923,27 @@ brier_plot_data_horizontal <- brier_score_decomposition_horizontal %>%
     model = factor(model, levels = brier_levs, ordered = TRUE)
   )
 
-brier_plot_data_horizontal <- brier_plot_data_horizontal %>%
+brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
   mutate(
     component = factor(component, levels = c("gap","MCB", "DSC","score_invisible","UNC", "MeanScore"))
   )
 
-brier_plot_data_horizontal <- brier_plot_data_horizontal %>%
+brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
   mutate(
-    breite = case_when(
+    wdth = case_when(
       class_group == 3 ~ 4,
       class_group %in% c(1, 2) ~ 1,
       class_group == 4 ~ 10
     )
   )
 
-brier_plot_data_horizontal <- brier_plot_data_horizontal %>%
-   slice(1:(n() - 54))
+# brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
+#    slice(1:(n() - 54))
 
 
 
-ggplot(brier_plot_data_horizontal, aes(x = class_group, y = value, fill = component)) +
-  geom_bar(stat = "identity", position = "stack", width = brier_plot_data_horizontal$breite) +
+ggplot(brier_score_decomposition_barplot, aes(x = class_group, y = value, fill = component)) +
+  geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot$wdth) +
   facet_grid(model ~ ., switch = "y") +
   coord_flip() +
   scale_fill_manual(
@@ -1065,89 +969,6 @@ ggplot(brier_plot_data_horizontal, aes(x = class_group, y = value, fill = compon
     panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.3),
     plot.title = element_text(face = "bold", size = 14)
   )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-brier_plot_data_gap <- brier_plot_data_horizontal %>%
-  group_split(model) %>%
-  map_dfr(~ .x %>% add_row(
-    model = paste0("gap_", unique(.x$model)),  # eindeutiger Dummy-Name
-    component = "MeanScore",
-    class = "SCORE",
-    class_group = 3,
-    value = 0,
-    breite = 0.5,
-    .after = nrow(.x)
-  )) 
-
-
-
-ggplot(brier_plot_data_gap, aes(x = class_group, y = value, fill = component)) +
-  geom_bar(stat = "identity", position = "stack", color = "white", size = 0.05, width = brier_plot_data_gap$breite) +
-  facet_grid(model ~ ., switch = "y") +
-  coord_flip() +
-  scale_fill_manual(
-    values = c("score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),
-    ###################################
-    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
-    ##################################
-    name = ""
-  ) +
-  labs(title = "Mean Brier Score Decomposition for Onset Prediction (01-2018 to 12-2023, all countries)",
-       y = if ("ShapeFinder" %in% brier_plot_data_horizontal$model) "" else "Dein Y-Titel") + 
-  theme_classic() +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
-  theme(
-    panel.spacing = unit(0, "points"),
-    strip.background = element_blank(),
-    strip.placement = "outside",
-    strip.text.y.left = element_text(angle = 0, hjust = 1),
-    axis.text.y = element_blank(),
-    axis.ticks.length.y = unit(0, "points"),
-    axis.title = element_blank(),
-    legend.position = "bottom",
-    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.3),
-    plot.title = element_text(face = "bold", size = 14)
-  )
-
-
-
 
 
 
