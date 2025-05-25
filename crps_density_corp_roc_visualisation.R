@@ -32,6 +32,7 @@ library(grid)
 library(precrec)
 library(triptych)
 library(ggpattern)
+library(cowplot)
 
 #devtools::install_github("aijordan/reliabilitydiag")
 
@@ -889,9 +890,9 @@ murphy_plot
 ## -----------------------------------------------------
 ## plots for selection of 8 models
 ##------------------------------------------------------
-selected_models <- c("zero","last","conflictology",
+selected_models <- c("last","conflictology",
                      "conflictforecast_v2", "submission_muchlinski_thornhill", "submission_final_omm", "unito_transformer", "Neg_Bin_GLMM")
-
+#"zero",
 
 model_colors <- c(
   "zero"                        = "#009682",  # green  
@@ -912,15 +913,57 @@ model_labels <- c(
   "submission_muchlinski_thornhill" = "MT Hurdle GAM",
   "submission_final_omm"         = "Observed MM",
   "unito_transformer"            = "UNITO Transformer",
-  "Neg_Bin_GLMM"                 = "NegBin GLMM"
+  "Neg_Bin_GLMM"                 = "NegBin GLMM",
+  #
+  "tft" = "CCEW tft",
+  "ShapeFinder" = "Shape Finder",
+  "quantile_forecast" = "Quantile Forecast",
+  "boot_240" = "VIEWS Bootstrap",
+  "bodentien_rueter_neuralnet" = "BR Neural Net",
+  "bodentien_rueter_negbin" = "BR NegBin"
 )
 
 theme_setup <- ggplot2::theme(
   plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
   axis.title = ggplot2::element_text(size = 13),
   legend.title = ggplot2::element_text(size = 13),
+  axis.text = ggplot2::element_text(size = 12),
   legend.text = ggplot2::element_text(size = 11)
 )
+
+
+## -----
+## CRPS decomposition
+## -----
+
+## Attention: not only for selected models but for all models without excluded ones!!
+
+crps_month_selected_models <- crps_month
+
+# Rename models
+crps_month_selected_models$Model <- recode(
+  crps_month_selected_models$Model,
+  !!!model_labels
+)
+
+crps_conflict_situation_plot <- ggplot(crps_month_selected_models[-which(crps_month_selected_models$Model %in% excluded_models), ], 
+                                       aes(fill = Situation, y = Model, x = .data[["CRPS"]])) + 
+  geom_bar(position = "stack", stat = "identity") +
+  labs(title = "Contribution to the Mean CRPS per Conflict Situation",
+       x = "Mean CRPS") +
+  scale_fill_manual("Situation", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa"),
+                    labels = c("conflict" = "Conflict", "deescalation" = "Deescalation", "onset" = "Onset", "peace" = "Peace")) +
+  theme_setup +
+  theme(
+    axis.ticks.y = element_blank(),
+  )
+
+crps_conflict_situation_plot
+
+
+
+
+
 
 
 ## -----
@@ -941,10 +984,11 @@ selected_murphy_plot <- ggplot(df_est_conflict_subset) +
   labs(
     title = "Murphy Diagram",
     x = expression(paste("Parameter ", theta)),
-    y = "Mean Elementary Score",
-    color = "Model"
+    y = "Mean elementary score",
+    color = ""
   ) + 
-  theme_setup
+  theme_setup + 
+  theme(legend.position = "bottom")
 
 selected_murphy_plot
 
@@ -999,9 +1043,6 @@ mm_selected_models <- mmdata(
 
 roc_curve_selected_models <- autoplot(evalmod(mm_selected_models), curvetype = "ROC") + 
   ggplot2::geom_line(size = 1, alpha = 0.8) + 
-  ggplot2::theme(
-    plot.title = ggplot2::element_text(size = 13)
-  ) + 
   ggplot2::scale_color_manual(
     values = model_colors,
     breaks = names(model_labels),
@@ -1011,9 +1052,10 @@ roc_curve_selected_models <- autoplot(evalmod(mm_selected_models), curvetype = "
     title = "ROC Curve",
     x = "FAR",
     y = "HR",
-    color = "Model"
+    color = ""
   ) +
-  theme_setup
+  theme_setup +
+  ggplot2::theme(legend.position = "bottom")
 
 roc_curve_selected_models
 
@@ -1031,6 +1073,270 @@ roc_curve_selected_models
 ## -----
 ## Reliability diagram
 ## -----
+
+## function to create custom reliability diagram
+create_reliability_diag <- function(data, forecast_model) {
+  
+  reliability_data_selected <- data %>%
+    filter(model == forecast_model)
+  
+  r_selected <- reliabilitydiag(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual)
+  
+  data_estim <- estimates(reliability(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual))
+  
+  # delete duplicate rows
+  df_clean <- data_estim %>% distinct()
+  
+  # make sure that CEP is in right order
+  df_clean <- df_clean[order(df_clean$CEP), ]
+  
+  ## create segment data frame
+  df_segments <- data.frame(
+    x = numeric(),
+    x_end = numeric(),
+    CEP = numeric(),
+    CEP_end = numeric()
+  )
+  
+  path_color = model_colors[forecast_model]
+  #path_color = "green"
+  
+  
+  # extract all segments (slope 0)
+  for (i in 1:(nrow(df_clean) - 1)) {
+    if (df_clean$CEP[i] == df_clean$CEP[i + 1]) {
+      x_min <- min(df_clean$x[i], df_clean$x[i + 1])
+      x_max <- max(df_clean$x[i], df_clean$x[i + 1])
+      cep <- df_clean$CEP[i]
+      cep_end <- df_clean$CEP[i+1]
+      
+      df_segments <- rbind(df_segments, data.frame(
+        x = x_min,
+        x_end = x_max,
+        CEP = cep,
+        CEP_end = cep_end
+      ))
+    }
+  }
+  
+  p <- autoplot(r_selected) + ggplot2::labs(
+    title = model_labels[model_name],
+    x = "Forecast value",
+    y = "CEP") +
+    ggplot2::theme(
+      plot.title = ggplot2::element_text(size = 14, hjust = 0.5),
+      legend.position = "none"
+    ) +
+    ggplot2::geom_segment(
+      mapping = ggplot2::aes(
+        x = .data$x, 
+        y = .data$CEP, 
+        xend = .data$x_end, 
+        yend = .data$CEP_end),
+      data = df_segments,
+      linewidth = 1.8,
+      colour = path_color
+    ) +
+    ggplot2::geom_path(
+      mapping = ggplot2::aes(
+        x = .data$x,
+        y = .data$CEP
+      ),
+      data = data_estim,
+      linewidth = 1,
+      colour = path_color
+    ) 
+  #+ 
+   # ggplot2::scale_color_manual(values = c("value" = path_color))
+  
+  return(p)
+  
+}
+
+
+# list to store the CORP
+corp_plots_list <- list()
+
+for (model_name in selected_models) {
+  
+  # reliability_data_selected <- prev_peace_prob_month_long_binary_actual %>%
+  #   filter(model == model_name)
+  # 
+  # r_selected <- reliabilitydiag(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual)
+  # plot <- autoplot(r_selected) + ggplot2::labs(
+  #   title = model_labels[model_name],
+  #   x = "Forecast value",
+  #   y = "CEP") +
+  #   ggplot2::theme(
+  #     plot.title = ggplot2::element_text(size = 14, hjust = 0.5)
+  #   ) +
+  #   ggplot2::geom_path(
+  #     mapping = ggplot2::aes(
+  #       x = .data$x,
+  #       y = .data$CEP,
+  #       col = .data$forecast
+  #     ),
+  #     data = data
+  #   )
+  
+  
+  plot <- create_reliability_diag(prev_peace_prob_month_long_binary_actual, model_name)
+  
+  # hier potentiell noch mehr abspeichern
+  corp_plots_list[[model_name]] <- list(plot = plot)
+  
+}
+
+# extract all plots from list -> returns list
+plots_corp <- lapply(corp_plots_list, function(x) x$plot)
+
+plots_corp["submission_muchlinski_thornhill"]
+
+
+
+
+
+
+
+
+
+
+
+
+reliability_data_selected <- prev_peace_prob_month_long_binary_actual %>%
+  filter(model == "submission_muchlinski_thornhill")
+
+r_selected <- reliabilitydiag(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual)
+
+data_estim <- estimates(reliability(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual))
+
+
+
+df_clean <- data_estim %>% distinct()
+
+# make sure that CEP is in right order
+df_clean <- df_clean[order(df_clean$CEP), ]
+
+df_segments <- data.frame(
+  x = numeric(),
+  x_end = numeric(),
+  CEP = numeric(),
+  CEP_end = numeric()
+)
+
+# extract all segments (slope 0)
+for (i in 1:(nrow(df_clean) - 1)) {
+  if (df_clean$CEP[i] == df_clean$CEP[i + 1]) {
+    x_min <- min(df_clean$x[i], df_clean$x[i + 1])
+    x_max <- max(df_clean$x[i], df_clean$x[i + 1])
+    cep <- df_clean$CEP[i]
+    cep_end <- df_clean$CEP[i+1]
+    
+    df_segments <- rbind(df_segments, data.frame(
+      x = x_min,
+      x_end = x_max,
+      CEP = cep,
+      CEP_end = cep_end
+    ))
+  }
+}
+
+
+autoplot(r_selected) + ggplot2::labs(
+  title = model_labels[model_name],
+  x = "Forecast value",
+  y = "CEP") +
+  ggplot2::theme(
+    plot.title = ggplot2::element_text(size = 14, hjust = 0.5),
+    legend.position = "none"
+  ) +
+  ggplot2::geom_segment(
+    mapping = ggplot2::aes(
+      x = .data$x, 
+      y = .data$CEP, 
+      xend = .data$x_end, 
+      yend = .data$CEP_end),
+    data = df_segments,
+    linewidth = 1.8,
+    colour = "green"
+  ) +
+  ggplot2::geom_path(
+    mapping = ggplot2::aes(
+      x = .data$x,
+      y = .data$CEP,
+      col = .data$forecast
+    ),
+    data = data_estim,
+    linewidth = 1
+  ) + 
+  ggplot2::scale_color_manual(values = c("value" = "green"))
+  
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Make three plots.
+# We set left and right margins to 0 to remove unnecessary spacing in the
+# final plot arrangement.
+p1 <- plots_corp["conflictforecast_v2"]$conflictforecast_v2 +
+  theme(plot.margin = unit(c(6,0,6,0), "pt"))
+p2 <- plots_corp["zero"]$zero +
+  theme(plot.margin = unit(c(6,0,6,0), "pt"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) + 
+  ylab("")
+p3 <- plots_corp["last"]$last +
+  theme(plot.margin = unit(c(6,0,6,0), "pt")) + ylab("")
+
+
+# arrange the three plots in a single row
+prow <- plot_grid( p1 + theme(legend.position="none"),
+                   p2 + theme(legend.position="none"),
+                   p3 + theme(legend.position="none"),
+                   align = 'vh',
+                   hjust = -1,
+                   nrow = 1
+)
+
+# extract the legend from one of the plots
+# (clearly the whole thing only makes sense if all plots
+# have the same legend, so we can arbitrarily pick one.)
+legend_b <- get_legend(p1 + theme(legend.position="bottom"))
+
+# add the legend underneath the row we made earlier. Give it 10% of the height
+# of one plot (via rel_heights).
+p <- plot_grid( prow, legend_b, ncol = 1, rel_heights = c(1, .2))
+p
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1130,7 +1436,7 @@ brier_score_decomposition_barplot$model <- recode(
 
 
 
-ggplot(brier_score_decomposition_barplot, aes(x = class_group, y = value, fill = component)) +
+brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = class_group, y = value, fill = component)) +
   geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot$wdth) +
   facet_grid(model ~ ., switch = "y") +
   coord_flip() +
@@ -1143,7 +1449,7 @@ ggplot(brier_score_decomposition_barplot, aes(x = class_group, y = value, fill =
   ) +
   labs(title = "Mean Brier Score Decomposition Plot") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.05)) +
   theme(
     panel.spacing = unit(0, "points"),
     strip.background = element_blank(),
@@ -1151,9 +1457,10 @@ ggplot(brier_score_decomposition_barplot, aes(x = class_group, y = value, fill =
     strip.text.y.left = element_text(angle = 0, hjust = 1, size = 11),
     axis.text.y = element_blank(),
     axis.ticks.length.y = unit(0, "points"),
+    axis.ticks.x = element_blank(),
     axis.title = element_blank(),
     legend.position = "bottom",
-    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.3),
+    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
     plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
     legend.title = ggplot2::element_text(size = 13),
     legend.text = ggplot2::element_text(size = 11),
@@ -1161,6 +1468,6 @@ ggplot(brier_score_decomposition_barplot, aes(x = class_group, y = value, fill =
     axis.line.y = element_blank()
   )
 
-
+brier_score_decomposition
 
 
