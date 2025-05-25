@@ -890,9 +890,9 @@ murphy_plot
 ## -----------------------------------------------------
 ## plots for selection of 8 models
 ##------------------------------------------------------
-selected_models <- c("last","conflictology",
+selected_models <- c("zero","last","conflictology",
                      "conflictforecast_v2", "submission_muchlinski_thornhill", "submission_final_omm", "unito_transformer", "Neg_Bin_GLMM")
-#"zero",
+
 
 model_colors <- c(
   "zero"                        = "#009682",  # green  
@@ -1099,25 +1099,39 @@ create_reliability_diag <- function(data, forecast_model) {
   )
   
   path_color = model_colors[forecast_model]
-  #path_color = "green"
+  point_draw <- NULL
   
-  
-  # extract all segments (slope 0)
-  for (i in 1:(nrow(df_clean) - 1)) {
-    if (df_clean$CEP[i] == df_clean$CEP[i + 1]) {
-      x_min <- min(df_clean$x[i], df_clean$x[i + 1])
-      x_max <- max(df_clean$x[i], df_clean$x[i + 1])
-      cep <- df_clean$CEP[i]
-      cep_end <- df_clean$CEP[i+1]
-      
-      df_segments <- rbind(df_segments, data.frame(
-        x = x_min,
-        x_end = x_max,
-        CEP = cep,
-        CEP_end = cep_end
-      ))
+  if(length(df_clean$CEP) > 1){
+    # extract all segments (slope 0)
+    for (i in 1:(nrow(df_clean) - 1)) {
+      if (df_clean$CEP[i] == df_clean$CEP[i + 1]) {
+        x_min <- min(df_clean$x[i], df_clean$x[i + 1])
+        x_max <- max(df_clean$x[i], df_clean$x[i + 1])
+        cep <- df_clean$CEP[i]
+        cep_end <- df_clean$CEP[i+1]
+        
+        df_segments <- rbind(df_segments, data.frame(
+          x = x_min,
+          x_end = x_max,
+          CEP = cep,
+          CEP_end = cep_end
+        ))
+      }
     }
+  } else{
+    point_draw <- ggplot2::geom_point(
+      mapping = ggplot2::aes(
+        x = .data$x,
+        y = .data$CEP,
+      ),
+      data = data_estim,
+      colour = path_color,
+      shape = 19,
+      size = 3
+    )
   }
+  
+  
   
   p <- autoplot(r_selected) + ggplot2::labs(
     title = model_labels[model_name],
@@ -1145,9 +1159,7 @@ create_reliability_diag <- function(data, forecast_model) {
       data = data_estim,
       linewidth = 1,
       colour = path_color
-    ) 
-  #+ 
-   # ggplot2::scale_color_manual(values = c("value" = path_color))
+    ) + point_draw
   
   return(p)
   
@@ -1190,7 +1202,7 @@ for (model_name in selected_models) {
 # extract all plots from list -> returns list
 plots_corp <- lapply(corp_plots_list, function(x) x$plot)
 
-plots_corp["submission_muchlinski_thornhill"]
+plots_corp["zero"]
 
 
 
@@ -1204,7 +1216,7 @@ plots_corp["submission_muchlinski_thornhill"]
 
 
 reliability_data_selected <- prev_peace_prob_month_long_binary_actual %>%
-  filter(model == "submission_muchlinski_thornhill")
+  filter(model == "conflictology")
 
 r_selected <- reliabilitydiag(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual)
 
@@ -1224,23 +1236,26 @@ df_segments <- data.frame(
   CEP_end = numeric()
 )
 
-# extract all segments (slope 0)
-for (i in 1:(nrow(df_clean) - 1)) {
-  if (df_clean$CEP[i] == df_clean$CEP[i + 1]) {
-    x_min <- min(df_clean$x[i], df_clean$x[i + 1])
-    x_max <- max(df_clean$x[i], df_clean$x[i + 1])
-    cep <- df_clean$CEP[i]
-    cep_end <- df_clean$CEP[i+1]
-    
-    df_segments <- rbind(df_segments, data.frame(
-      x = x_min,
-      x_end = x_max,
-      CEP = cep,
-      CEP_end = cep_end
-    ))
+if(length(df_segments) > 0){
+  # extract all segments (slope 0)
+  for (i in 1:(nrow(df_clean) - 1)) {
+    if (df_clean$CEP[i] == df_clean$CEP[i + 1]) {
+      x_min <- min(df_clean$x[i], df_clean$x[i + 1])
+      x_max <- max(df_clean$x[i], df_clean$x[i + 1])
+      cep <- df_clean$CEP[i]
+      cep_end <- df_clean$CEP[i+1]
+      
+      df_segments <- rbind(df_segments, data.frame(
+        x = x_min,
+        x_end = x_max,
+        CEP = cep,
+        CEP_end = cep_end
+      ))
+    }
   }
 }
 
+length(df_clean$CEP)
 
 autoplot(r_selected) + ggplot2::labs(
   title = model_labels[model_name],
@@ -1264,16 +1279,25 @@ autoplot(r_selected) + ggplot2::labs(
     mapping = ggplot2::aes(
       x = .data$x,
       y = .data$CEP,
-      col = .data$forecast
     ),
     data = data_estim,
-    linewidth = 1
-  ) + 
-  ggplot2::scale_color_manual(values = c("value" = "green"))
+    linewidth = 1,
+    colour = "green"
+  ) + NULL
+  
   
   
 
-
+  ggplot2::geom_point(
+    mapping = ggplot2::aes(
+      x = .data$x,
+      y = .data$CEP,
+    ),
+    data = data_estim,
+    colour = "green",
+    shape = 16,
+    size = 3
+  )
 
 
 
