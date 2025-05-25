@@ -1171,149 +1171,14 @@ corp_plots_list <- list()
 
 for (model_name in selected_models) {
   
-  # reliability_data_selected <- prev_peace_prob_month_long_binary_actual %>%
-  #   filter(model == model_name)
-  # 
-  # r_selected <- reliabilitydiag(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual)
-  # plot <- autoplot(r_selected) + ggplot2::labs(
-  #   title = model_labels[model_name],
-  #   x = "Forecast value",
-  #   y = "CEP") +
-  #   ggplot2::theme(
-  #     plot.title = ggplot2::element_text(size = 14, hjust = 0.5)
-  #   ) +
-  #   ggplot2::geom_path(
-  #     mapping = ggplot2::aes(
-  #       x = .data$x,
-  #       y = .data$CEP,
-  #       col = .data$forecast
-  #     ),
-  #     data = data
-  #   )
-  
-  
   plot <- create_reliability_diag(prev_peace_prob_month_long_binary_actual, model_name)
   
-  # hier potentiell noch mehr abspeichern
   corp_plots_list[[model_name]] <- list(plot = plot)
   
 }
 
 # extract all plots from list -> returns list
 plots_corp <- lapply(corp_plots_list, function(x) x$plot)
-
-plots_corp["zero"]
-
-
-
-
-
-
-
-
-
-
-
-
-reliability_data_selected <- prev_peace_prob_month_long_binary_actual %>%
-  filter(model == "conflictology")
-
-r_selected <- reliabilitydiag(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual)
-
-data_estim <- estimates(reliability(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual))
-
-
-
-df_clean <- data_estim %>% distinct()
-
-# make sure that CEP is in right order
-df_clean <- df_clean[order(df_clean$CEP), ]
-
-df_segments <- data.frame(
-  x = numeric(),
-  x_end = numeric(),
-  CEP = numeric(),
-  CEP_end = numeric()
-)
-
-if(length(df_segments) > 0){
-  # extract all segments (slope 0)
-  for (i in 1:(nrow(df_clean) - 1)) {
-    if (df_clean$CEP[i] == df_clean$CEP[i + 1]) {
-      x_min <- min(df_clean$x[i], df_clean$x[i + 1])
-      x_max <- max(df_clean$x[i], df_clean$x[i + 1])
-      cep <- df_clean$CEP[i]
-      cep_end <- df_clean$CEP[i+1]
-      
-      df_segments <- rbind(df_segments, data.frame(
-        x = x_min,
-        x_end = x_max,
-        CEP = cep,
-        CEP_end = cep_end
-      ))
-    }
-  }
-}
-
-length(df_clean$CEP)
-
-autoplot(r_selected) + ggplot2::labs(
-  title = model_labels[model_name],
-  x = "Forecast value",
-  y = "CEP") +
-  ggplot2::theme(
-    plot.title = ggplot2::element_text(size = 14, hjust = 0.5),
-    legend.position = "none"
-  ) +
-  ggplot2::geom_segment(
-    mapping = ggplot2::aes(
-      x = .data$x, 
-      y = .data$CEP, 
-      xend = .data$x_end, 
-      yend = .data$CEP_end),
-    data = df_segments,
-    linewidth = 1.8,
-    colour = "green"
-  ) +
-  ggplot2::geom_path(
-    mapping = ggplot2::aes(
-      x = .data$x,
-      y = .data$CEP,
-    ),
-    data = data_estim,
-    linewidth = 1,
-    colour = "green"
-  ) + NULL
-  
-  
-  
-
-  ggplot2::geom_point(
-    mapping = ggplot2::aes(
-      x = .data$x,
-      y = .data$CEP,
-    ),
-    data = data_estim,
-    colour = "green",
-    shape = 16,
-    size = 3
-  )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # Make three plots.
 # We set left and right margins to 0 to remove unnecessary spacing in the
@@ -1350,6 +1215,76 @@ p
 
 
 
+
+
+
+
+# Kombiniere in einem 2x4 Layout
+p_all <- plot_grid(plotlist = plots_corp, nrow = 2, ncol = 4, align = "hv")
+
+# Anzeigen
+p_all
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Hilfsfunktion für theme-Anpassung je Plot-Position
+adjust_plot_theme <- function(p, show_x = FALSE, show_y = FALSE) {
+  p +
+    theme(
+      axis.text.x = if (show_x) element_text() else element_blank(),
+      axis.ticks.x = if (show_x) element_line() else element_blank(),
+      axis.title.x = element_blank(),  # Titel kommt später zentral
+      axis.text.y = if (show_y) element_text() else element_blank(),
+      axis.ticks.y = if (show_y) element_line() else element_blank(),
+      axis.title.y = element_blank(),  # Titel kommt später zentral
+      plot.margin = unit(c(6, 6, 6, 6), "pt")
+    )
+}
+
+# Alle Plots ohne Legende
+plots_clean <- lapply(plots_corp, \(p) p + theme(legend.position = "none"))
+
+# Konkrete Anpassung nach deiner Struktur
+plots_arranged <- list(
+  adjust_plot_theme(plots_clean[[1]], show_x = FALSE, show_y = TRUE),  # oben links
+  adjust_plot_theme(plots_clean[[2]], show_x = FALSE, show_y = FALSE),
+  adjust_plot_theme(plots_clean[[3]], show_x = FALSE, show_y = FALSE),
+  adjust_plot_theme(plots_clean[[4]], show_x = FALSE, show_y = FALSE),
+  adjust_plot_theme(plots_clean[[5]], show_x = TRUE, show_y = TRUE),   # unten links
+  adjust_plot_theme(plots_clean[[6]], show_x = TRUE, show_y = FALSE),
+  adjust_plot_theme(plots_clean[[7]], show_x = TRUE, show_y = FALSE),
+  adjust_plot_theme(plots_clean[[8]], show_x = TRUE, show_y = FALSE)
+)
+
+# 2x4 Layout
+grid_main <- plot_grid(plotlist = plots_arranged, nrow = 2)
+
+# Achsentitel separat über cowplot::ggdraw()
+grid_with_labels <- plot_grid(
+  ggdraw() + draw_label("CEP", angle = 90, vjust = 1.2),  # Y-Titel links
+  plot_grid(
+    grid_main,
+    ggdraw() + draw_label("Forecast value", vjust = -0.5),  # X-Titel unten
+    ncol = 1,
+    rel_heights = c(1, 0.08)
+  ),
+  ncol = 2,
+  rel_widths = c(0.05, 1)
+)
+
+# Anzeigen
+grid_with_labels
 
 
 
