@@ -887,9 +887,9 @@ murphy_plot
 
 
 
-## -----------------------------------------------------
+## ------------------------------------------------------------------------------------------------------------------------------
 ## plots for selection of 8 models
-##------------------------------------------------------
+##-------------------------------------------------------------------------------------------------------------------------------
 selected_models <- c("zero","last","conflictology",
                      "conflictforecast_v2", "submission_muchlinski_thornhill", "submission_final_omm", "unito_transformer", "Neg_Bin_GLMM")
 
@@ -956,15 +956,16 @@ crps_conflict_situation_plot <- ggplot(crps_month_selected_models[-which(crps_mo
   theme_setup +
   theme(
     axis.ticks.y = element_blank(),
-  )
+    axis.text.y = element_text(colour = c("grey40","grey40","grey40","black","black","black","black",
+                                          "grey40","grey40","black","grey40","black","black","black")))
 
 crps_conflict_situation_plot
 
 
 
-
-
-
+## ------------------------------------------------------------------------
+## Triptych plots
+## ------------------------------------------------------------------------
 
 ## -----
 ## murphy diagram
@@ -973,7 +974,7 @@ mr_conflict_subset <- murphy(subset(murphy_data, select = c(selected_models,"act
                       y_var = "actual")
 
 df_est_conflict_subset <- estimates(mr_conflict_subset)
-selected_murphy_plot <- ggplot(df_est_conflict_subset) + 
+murphy_diagram_selected_models <- ggplot(df_est_conflict_subset) + 
   geom_path(aes(x = knot, y = mean_score, col = forecast), linewidth = 1, alpha = 0.8) + 
   scale_color_manual(
     values = model_colors,
@@ -988,17 +989,10 @@ selected_murphy_plot <- ggplot(df_est_conflict_subset) +
     color = ""
   ) + 
   theme_setup + 
-  theme(legend.position = "bottom")
+  theme(legend.position = "none",#"bottom
+        aspect.ratio = 1)
 
-selected_murphy_plot
-
-
-
-
-### RECHTECKIG ABSPEICHERN
-
-
-
+murphy_diagram_selected_models
 
 
 ## -----
@@ -1055,20 +1049,9 @@ roc_curve_selected_models <- autoplot(evalmod(mm_selected_models), curvetype = "
     color = ""
   ) +
   theme_setup +
-  ggplot2::theme(legend.position = "bottom")
+  ggplot2::theme(legend.position = "none") #"bottom
 
 roc_curve_selected_models
-
-
-
-
-
-### RECHTECKIG ABSPEICHERN
-
-
-
-
-
 
 ## -----
 ## Reliability diagram
@@ -1127,7 +1110,7 @@ create_reliability_diag <- function(data, forecast_model) {
       data = data_estim,
       colour = path_color,
       shape = 19,
-      size = 3
+      size = 3 #3
     )
   }
   
@@ -1138,7 +1121,7 @@ create_reliability_diag <- function(data, forecast_model) {
     x = "Forecast value",
     y = "CEP") +
     ggplot2::theme(
-      plot.title = ggplot2::element_text(size = 14, hjust = 0.5),
+      plot.title = ggplot2::element_text(size = 12, hjust = 0.5),
       legend.position = "none"
     ) +
     ggplot2::geom_segment(
@@ -1148,7 +1131,7 @@ create_reliability_diag <- function(data, forecast_model) {
         xend = .data$x_end, 
         yend = .data$CEP_end),
       data = df_segments,
-      linewidth = 1.8,
+      linewidth = 1.8, #1.8
       colour = path_color
     ) +
     ggplot2::geom_path(
@@ -1157,7 +1140,7 @@ create_reliability_diag <- function(data, forecast_model) {
         y = .data$CEP
       ),
       data = data_estim,
-      linewidth = 1,
+      linewidth = 1, #1
       colour = path_color
     ) + point_draw
   
@@ -1177,114 +1160,177 @@ for (model_name in selected_models) {
   
 }
 
-# extract all plots from list -> returns list
-plots_corp <- lapply(corp_plots_list, function(x) x$plot)
+# modify plot list
+corp_plots_grid_modified_list <- corp_plots_list
 
-# Make three plots.
-# We set left and right margins to 0 to remove unnecessary spacing in the
-# final plot arrangement.
-p1 <- plots_corp["conflictforecast_v2"]$conflictforecast_v2 +
-  theme(plot.margin = unit(c(6,0,6,0), "pt"))
-p2 <- plots_corp["zero"]$zero +
-  theme(plot.margin = unit(c(6,0,6,0), "pt"),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank()) + 
-  ylab("")
-p3 <- plots_corp["last"]$last +
-  theme(plot.margin = unit(c(6,0,6,0), "pt")) + ylab("")
+corp_plot_model_names <- names(corp_plots_grid_modified_list)
 
 
-# arrange the three plots in a single row
-prow <- plot_grid( p1 + theme(legend.position="none"),
-                   p2 + theme(legend.position="none"),
-                   p3 + theme(legend.position="none"),
-                   align = 'vh',
-                   hjust = -1,
-                   nrow = 1
-)
-
-# extract the legend from one of the plots
-# (clearly the whole thing only makes sense if all plots
-# have the same legend, so we can arbitrarily pick one.)
-legend_b <- get_legend(p1 + theme(legend.position="bottom"))
-
-# add the legend underneath the row we made earlier. Give it 10% of the height
-# of one plot (via rel_heights).
-p <- plot_grid( prow, legend_b, ncol = 1, rel_heights = c(1, .2))
-p
-
-
-
-
-
-
-
-# Kombiniere in einem 2x4 Layout
-p_all <- plot_grid(plotlist = plots_corp, nrow = 2, ncol = 4, align = "hv")
-
-# Anzeigen
-p_all
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Hilfsfunktion für theme-Anpassung je Plot-Position
-adjust_plot_theme <- function(p, show_x = FALSE, show_y = FALSE) {
-  p +
-    theme(
-      axis.text.x = if (show_x) element_text() else element_blank(),
-      axis.ticks.x = if (show_x) element_line() else element_blank(),
-      axis.title.x = element_blank(),  # Titel kommt später zentral
-      axis.text.y = if (show_y) element_text() else element_blank(),
-      axis.ticks.y = if (show_y) element_line() else element_blank(),
-      axis.title.y = element_blank(),  # Titel kommt später zentral
-      plot.margin = unit(c(6, 6, 6, 6), "pt")
-    )
+for(i in seq_along(corp_plots_list)){
+  
+  model <- corp_plot_model_names[i]
+  
+  p <- NULL
+  
+  if(i == 1){
+    p <- corp_plots_grid_modified_list[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if(i > 1 && i < 5){
+    p <- corp_plots_grid_modified_list[[model]]$plot + 
+      ggplot2::theme(axis.text.y = element_blank(),
+                     axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.ticks.y = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if(i == 5){
+    p <- corp_plots_grid_modified_list[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else {
+    p <- corp_plots_grid_modified_list[[model]]$plot + 
+      ggplot2::theme(axis.text.y = element_blank(),
+                     axis.ticks.y = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  }
+  
+  
+  corp_plots_grid_modified_list[[model]]$plot <- p
+  
 }
 
-# Alle Plots ohne Legende
-plots_clean <- lapply(plots_corp, \(p) p + theme(legend.position = "none"))
+plots_corp_gird_modified <- lapply(corp_plots_grid_modified_list, function(x) x$plot)
 
-# Konkrete Anpassung nach deiner Struktur
-plots_arranged <- list(
-  adjust_plot_theme(plots_clean[[1]], show_x = FALSE, show_y = TRUE),  # oben links
-  adjust_plot_theme(plots_clean[[2]], show_x = FALSE, show_y = FALSE),
-  adjust_plot_theme(plots_clean[[3]], show_x = FALSE, show_y = FALSE),
-  adjust_plot_theme(plots_clean[[4]], show_x = FALSE, show_y = FALSE),
-  adjust_plot_theme(plots_clean[[5]], show_x = TRUE, show_y = TRUE),   # unten links
-  adjust_plot_theme(plots_clean[[6]], show_x = TRUE, show_y = FALSE),
-  adjust_plot_theme(plots_clean[[7]], show_x = TRUE, show_y = FALSE),
-  adjust_plot_theme(plots_clean[[8]], show_x = TRUE, show_y = FALSE)
+# Kombiniere in einem 2x4 Layout
+p_all <- plot_grid(plotlist = plots_corp_gird_modified, nrow = 2, ncol = 4, align = "hv", scale = 0.99)
+
+#create common x and y labels
+y.grob <- textGrob("CEP", 
+                   gp=gpar(col="black", fontsize=15), rot=90)
+
+x.grob <- textGrob("Forecast value", 
+                   gp=gpar(col="black", fontsize=15))
+
+#add to plot
+reliability_diag_selected_models_plot <- grid.arrange(arrangeGrob(p_all, left = y.grob, bottom = x.grob))
+reliability_diag_selected_models_plot
+
+
+
+## -----
+## combine Murpy Diagram and ROC curve
+## -----
+# method get legend in cowplot not longer working so method to get legend from
+# https://stackoverflow.com/questions/78163631/r-get-legend-from-cowplot-package-no-longer-work-for-ggplot2-version-3-5-0
+get_legend2 <- function(plot, legend = NULL) {
+  if (is.ggplot(plot)) {
+    gt <- ggplotGrob(plot)
+  } else {
+    if (is.grob(plot)) {
+      gt <- plot
+    } else {
+      stop("Plot object is neither a ggplot nor a grob.")
+    }
+  }
+  pattern <- "guide-box"
+  if (!is.null(legend)) {
+    pattern <- paste0(pattern, "-", legend)
+  }
+  indices <- grep(pattern, gt$layout$name)
+  not_empty <- !vapply(
+    gt$grobs[indices], 
+    inherits, what = "zeroGrob", 
+    FUN.VALUE = logical(1)
+  )
+  indices <- indices[not_empty]
+  if (length(indices) > 0) {
+    return(gt$grobs[[indices[1]]])
+  }
+  return(NULL)
+}
+
+# get legend from roc_curve_plot
+## ACHTUNG aktuell bei roc curv keine legend vorhanden!!!
+#legend_roc <- get_legend2(roc_curve_selected_models + theme(legend.position="bottom"))
+
+# arrange the three plots in a single row
+murphy_roc_selected_models_plot <- plot_grid(murphy_diagram_selected_models + theme(legend.position="none"),
+                                             NULL,
+                  roc_curve_selected_models + theme(legend.position="none"),
+                  align = 'vh',
+                  hjust = -1,
+                  nrow = 1,
+                  rel_widths = c(1, -0.1, 1)
 )
 
-# 2x4 Layout
-grid_main <- plot_grid(plotlist = plots_arranged, nrow = 2)
 
-# Achsentitel separat über cowplot::ggdraw()
-grid_with_labels <- plot_grid(
-  ggdraw() + draw_label("CEP", angle = 90, vjust = 1.2),  # Y-Titel links
-  plot_grid(
-    grid_main,
-    ggdraw() + draw_label("Forecast value", vjust = -0.5),  # X-Titel unten
-    ncol = 1,
-    rel_heights = c(1, 0.08)
-  ),
-  ncol = 2,
-  rel_widths = c(0.05, 1)
+# add the legend underneath the row, 10% of the height of one plot
+#murphy_roc_selected_models_plot_legend <- plot_grid(murphy_roc_selected_models_plot, legend_roc, ncol = 1, rel_heights = c(1, .2))
+
+murphy_roc_selected_models_plot
+
+
+
+
+## -----
+## combine Murpy Diagram, ROC curve and Reliability Diagram
+## -----
+new_triptych <- grid.arrange(
+  murphy_roc_selected_models_plot,
+  reliability_diag_selected_models_plot,
+  nrow = 2,
+  heights = c(1, 1.1)
 )
 
-# Anzeigen
-grid_with_labels
+new_triptych
+
+
+
+# width = 800, height = 800
+
+
+# # Schritt 1: erstelle top und bottom plotgrids
+# top_row <- plot_grid(
+#   murphy_diagram_selected_models,
+#   roc_curve_selected_models,
+#   ncol = 2,
+#   align = "h"
+# )
+# 
+# bottom_grid <- plot_grid(plotlist = plots_corp_gird_modified, 
+#           nrow = 2, 
+#           ncol = 4, 
+#           align = "hv", 
+#           scale = 1)
+# 
+# # Schritt 2: kombiniere Top + Bottom ohne Beschriftung
+# combined <- plot_grid(
+#   top_row,
+#   bottom_grid,
+#   ncol = 1,
+#   rel_heights = c(1, 1.5),
+#   rel_widths = c(2,1)
+# )
+# 
+# # Schritt 3: packe in ggdraw() und füge Achsentitel hinzu
+# final_plot <- ggdraw(combined) +
+#   draw_label("Forecast value", x = 0.5, y = 0, vjust = -0.5, size = 12) +  # x-Achse unten
+#   draw_label("CEP", x = 0, y = 0.5, angle = 90, vjust = 1.5, size = 12)    # y-Achse links
+
+
+
+
+
+
+
 
 
 
@@ -1400,7 +1446,7 @@ brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = c
   facet_grid(model ~ ., switch = "y") +
   coord_flip() +
   scale_fill_manual(
-    values = c("gap"="white","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),
+    values = c("gap"="white","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
     ###################################
     breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
     ##################################
