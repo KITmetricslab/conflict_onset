@@ -1428,9 +1428,9 @@ brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
 brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
   mutate(
     wdth = case_when(
-      class_group == 3 ~ 4,
-      class_group %in% c(1, 2) ~ 1,
-      class_group == 4 ~ 10
+      class_group == 3 ~ 4, #4
+      class_group %in% c(1, 2) ~ 2, #1
+      class_group == 4 ~ 10 #10
     )
   )
 
@@ -1438,6 +1438,11 @@ brier_score_decomposition_barplot$model <- recode(
   brier_score_decomposition_barplot$model,
   !!!model_labels
 )
+
+
+##
+# IDEE HIER: weitere null balken nach dem  roten und zwischen den anderen einfügen
+# rot, durchsichtig bzw weiß, grau, weiß hellgrau und der andere
 
 
 
@@ -1452,7 +1457,7 @@ brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = c
     ##################################
     name = ""
   ) +
-  labs(title = "Mean Brier Score Decomposition Plot") + 
+  labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
   theme_classic() +
   scale_y_continuous(breaks = seq(0, 1, by = 0.05)) +
   theme(
