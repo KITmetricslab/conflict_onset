@@ -97,7 +97,7 @@ names(predictive_samples) <- model_names
 ## -----
 
 # exclude some models for all plots and analysis
-excluded_models <- c("P_GLMM","TW_GLMM","submission_final_gpcmm","submission_final_hpmm","Neg_Bin_GAM", "P_GAM", "TW_GAM")
+excluded_models <- c("bodentien_rueter_neuralnet","P_GLMM","TW_GLMM","submission_final_gpcmm","submission_final_hpmm","Neg_Bin_GAM", "P_GAM", "TW_GAM")
 
 # later on in the CORP, Murphy diagram section there will be even more models removed.
 # but this is only for the detailed analyis. 
@@ -905,6 +905,7 @@ model_colors <- c(
   "Neg_Bin_GLMM"               = "#a3107c"   # purple
 )
 
+
 model_labels <- c(
   "zero"                          = "VIEWS Zero",
   "last"                          = "VIEWS Last Month",
@@ -919,8 +920,8 @@ model_labels <- c(
   "ShapeFinder" = "Shape Finder",
   "quantile_forecast" = "Quantile Forecast",
   "boot_240" = "VIEWS Bootstrap",
-  "bodentien_rueter_neuralnet" = "BR Neural Net",
-  "bodentien_rueter_negbin" = "BR NegBin"
+  "bodentien_rueter_negbin" = "BR NegBin",
+  "bodentien_rueter_neuralnet" = "BR Neural Net"
 )
 
 theme_setup <- ggplot2::theme(
@@ -939,6 +940,7 @@ theme_setup <- ggplot2::theme(
 ## Attention: not only for selected models but for all models without excluded ones!!
 
 crps_month_selected_models <- crps_month
+crps_month_selected_models <- crps_month_selected_models[-which(crps_month_selected_models$Model %in% excluded_models), ]
 
 # Rename models
 crps_month_selected_models$Model <- recode(
@@ -946,7 +948,7 @@ crps_month_selected_models$Model <- recode(
   !!!model_labels
 )
 
-crps_conflict_situation_plot <- ggplot(crps_month_selected_models[-which(crps_month_selected_models$Model %in% excluded_models), ], 
+crps_conflict_situation_plot <- ggplot(crps_month_selected_models, 
                                        aes(fill = Situation, y = Model, x = .data[["CRPS"]])) + 
   geom_bar(position = "stack", stat = "identity") +
   labs(title = "Contribution to the Mean CRPS per Conflict Situation",
@@ -956,12 +958,10 @@ crps_conflict_situation_plot <- ggplot(crps_month_selected_models[-which(crps_mo
   theme_setup +
   theme(
     axis.ticks.y = element_blank(),
-    axis.text.y = element_text(colour = c("grey40","grey40","grey40","black","black","black","black",
+    axis.text.y = element_text(colour = c("grey40","grey40","black","black","black","black",
                                           "grey40","grey40","black","grey40","black","black","black")))
 
 crps_conflict_situation_plot
-
-
 
 ## ------------------------------------------------------------------------
 ## Triptych plots
@@ -1382,19 +1382,21 @@ brier_score_decomposition <- bind_rows(brier_decomposition_results) %>%
   rename(MeanScore = mean_score)
 
 brier_score_decomposition_barplot <- brier_score_decomposition %>%
-  mutate(score_invisible = MeanScore, gap = 0)
+  mutate(score_invisible = MeanScore, gap = 0, gap1=0, gap2 = 0)
 
 # data frame with format for the barchart
 brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
   arrange(MeanScore) %>%  # sort by MeanScore
-  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap),
+  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap, gap1, gap2),
                names_to = "component",
                values_to = "value") %>%
   mutate(class = case_when(
     component %in% c("MeanScore") ~ "SCORE",
     component %in% c("MCB", "UNC") ~ "MCB_UNC",
     component %in% c("DSC", "score_invisible") ~ "DSC_score", 
-    component %in% c("gap") ~ "GAP"
+    component %in% c("gap") ~ "GAP",
+    component %in% c("gap1") ~ "GAPmeanscoreDSC",
+    component %in% c("gap2") ~ "GAPdscUNC",
   )) %>%
   select(model, class, component, value)
 
@@ -1415,23 +1417,12 @@ brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
       class == "MCB_UNC"   ~ 1,
       class == "DSC_score"       ~ 2,
       class == "SCORE" ~ 3,
-      class == "GAP" ~ 4
+      class == "GAP" ~ 4,
+      class == "GAPmeanscoreDSC" ~ 5,
+      class == "GAPdscUNC" ~ 6
+      
     ),  
     model = factor(model, levels = brier_levs, ordered = TRUE)
-  )
-
-brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
-  mutate(
-    component = factor(component, levels = c("gap","MCB", "DSC","score_invisible","UNC", "MeanScore"))
-  )
-
-brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
-  mutate(
-    wdth = case_when(
-      class_group == 3 ~ 4, #4
-      class_group %in% c(1, 2) ~ 2, #1
-      class_group == 4 ~ 10 #10
-    )
   )
 
 brier_score_decomposition_barplot$model <- recode(
@@ -1440,10 +1431,38 @@ brier_score_decomposition_barplot$model <- recode(
 )
 
 
-##
-# IDEE HIER: weitere null balken nach dem  roten und zwischen den anderen einfügen
-# rot, durchsichtig bzw weiß, grau, weiß hellgrau und der andere
+# set order of subbars within group
+brier_score_decomposition_barplot$component <- factor(
+  brier_score_decomposition_barplot$component,
+  levels = c("gap", "gap1", "gap2", "MCB", "UNC", "DSC", "score_invisible", "MeanScore")
+)
 
+# set order of sub bars within group
+brier_score_decomposition_barplot$class_group <- factor(
+  brier_score_decomposition_barplot$class_group,
+  levels = c(4,1,6,2,5,3)    
+)
+
+# set width of mean score bar
+mean_score_bar <- 4.5
+# set width of mcb,dcs,unc bars
+msc_dsc_unc_bar <- 2
+
+# width column
+brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
+  mutate(
+    wdth = case_when(
+      # MeanScore
+      class_group == 3 ~ mean_score_bar, #4
+      # MCB DSC
+      class_group %in% c(1, 2) ~ msc_dsc_unc_bar, #1
+      # gapswithin groups
+      class_group %in% c(5,6) ~ msc_dsc_unc_bar,
+      #gap between groups
+      class_group == 4 ~ 8 #10
+      
+    )
+  )
 
 
 brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = class_group, y = value, fill = component)) +
@@ -1451,7 +1470,7 @@ brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = c
   facet_grid(model ~ ., switch = "y") +
   coord_flip() +
   scale_fill_manual(
-    values = c("gap"="white","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
+    values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "darkgreen","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
     ###################################
     breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
     ##################################
@@ -1464,7 +1483,7 @@ brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = c
     panel.spacing = unit(0, "points"),
     strip.background = element_blank(),
     strip.placement = "outside",
-    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 11),
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 18),
     axis.text.y = element_blank(),
     axis.ticks.length.y = unit(0, "points"),
     axis.ticks.x = element_blank(),
@@ -1472,12 +1491,12 @@ brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = c
     legend.position = "bottom",
     panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
     plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-    legend.title = ggplot2::element_text(size = 13),
-    legend.text = ggplot2::element_text(size = 11),
+    legend.title = ggplot2::element_text(size = 15),
+    legend.text = ggplot2::element_text(size = 14),
     axis.line.x = element_blank(),
-    axis.line.y = element_blank()
+    axis.line.y = element_blank(),
+    axis.text.x = ggplot2::element_text(size = 14)
   )
 
 brier_score_decomposition
-
 
