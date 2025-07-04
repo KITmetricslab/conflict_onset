@@ -120,31 +120,25 @@ cm_pairs <- cbind(rep(country_ids, each = length(actuals_ids)),
 models_crps <- list()
 
 
-for (m in 1:n_models) {
-  crps_m <- apply(cm_pairs, 1, function(cm_pair) {
-    print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
-    true_observation <- observations_18_24 %>%
-      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-      select(outcome)
-    pred_sample <- predictive_samples[[m]] %>%
-      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-      select(outcome)
-    crps_sample(y = unlist(true_observation),
-                dat = unlist(pred_sample))
-  })
-  models_crps[[m]] <- data.frame("country_id" = cm_pairs[,1],
-                                 "month_id" = cm_pairs[,2],
-                                 "crps" = crps_m)
-}
-names(models_crps) <- model_names
-save(models_crps, file = "output/models_crps_updated.RData")
+# for (m in 1:n_models) {
+#   crps_m <- apply(cm_pairs, 1, function(cm_pair) {
+#     print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
+#     true_observation <- observations_18_24 %>%
+#       filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
+#       select(outcome)
+#     pred_sample <- predictive_samples[[m]] %>%
+#       filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
+#       select(outcome)
+#     crps_sample(y = unlist(true_observation),
+#                 dat = unlist(pred_sample))
+#   })
+#   models_crps[[m]] <- data.frame("country_id" = cm_pairs[,1],
+#                                  "month_id" = cm_pairs[,2],
+#                                  "crps" = crps_m)
+# }
+# names(models_crps) <- model_names
+# save(models_crps, file = "output/models_crps.RData")
 load("output/models_crps.RData")
-
-
-
-
-
-
 
 
 ## -----
@@ -317,10 +311,10 @@ print(colSums(models_crps_conflict_month[4,2:ncol(models_crps_conflict_month)] )
 print(colSums(models_crps_conflict_year[4,2:ncol(models_crps_conflict_year)] ))
 
 # print overall CRPS per model
-print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),2:ncol(models_crps_conflict_month)] ))[8]
+print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),2:ncol(models_crps_conflict_month)] ))
 print(colSums(models_crps_conflict_year[1:nrow(models_crps_conflict_year),2:ncol(models_crps_conflict_year)] ))
 
-print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),20]), digits = 20)
+print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),21]), digits = 20)
 
 
 
