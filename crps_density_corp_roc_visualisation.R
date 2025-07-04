@@ -63,7 +63,7 @@ observations_18_24 <- do.call(rbind, lapply(files_actuals_from18, arrow::read_pa
 ## -----
 
 benchmark_names <- c("boot_240", "conflictology", "last", "zero")
-submissions_names <- c("bodentien_rueter_negbin", "bodentien_rueter_neuralnet", "conflictforecast_v2", "Neg_Bin_GAM", "Neg_Bin_GLMM",
+submissions_names <- c("bodentien_rueter_negbin", "conflictforecast_v2", "Neg_Bin_GAM", "Neg_Bin_GLMM",
                        "P_GAM", "P_GLMM", "quantile_forecast", "ShapeFinder", "submission_final_gpcmm", "submission_final_hpmm",
                        "submission_final_omm", "submission_muchlinski_thornhill", "tft", "TW_GAM", "TW_GLMM", "unito_transformer")
 
@@ -97,7 +97,7 @@ names(predictive_samples) <- model_names
 ## -----
 
 # exclude some models for all plots and analysis
-excluded_models <- c("bodentien_rueter_neuralnet","P_GLMM","TW_GLMM","submission_final_gpcmm","submission_final_hpmm","Neg_Bin_GAM", "P_GAM", "TW_GAM")
+excluded_models <- c("P_GLMM","TW_GLMM","submission_final_gpcmm","submission_final_hpmm","Neg_Bin_GAM", "P_GAM", "TW_GAM")
 
 # later on in the CORP, Murphy diagram section there will be even more models removed.
 # but this is only for the detailed analyis. 
@@ -120,25 +120,30 @@ cm_pairs <- cbind(rep(country_ids, each = length(actuals_ids)),
 models_crps <- list()
 
 
-# for (m in 1:n_models) {
-#   crps_m <- apply(cm_pairs, 1, function(cm_pair) {
-#     print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
-#     true_observation <- observations_18_24 %>%
-#       filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-#       select(outcome)
-#     pred_sample <- predictive_samples[[m]] %>%
-#       filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
-#       select(outcome)
-#     crps_sample(y = unlist(true_observation),
-#                 dat = unlist(pred_sample))
-#   })
-#   models_crps[[m]] <- data.frame("country_id" = cm_pairs[,1],
-#                                  "month_id" = cm_pairs[,2],
-#                                  "crps" = crps_m)
-# }
-# names(models_crps) <- model_names
-# save(models_crps, file = "output/models_crps.RData")
+for (m in 1:n_models) {
+  crps_m <- apply(cm_pairs, 1, function(cm_pair) {
+    print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
+    true_observation <- observations_18_24 %>%
+      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
+      select(outcome)
+    pred_sample <- predictive_samples[[m]] %>%
+      filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
+      select(outcome)
+    crps_sample(y = unlist(true_observation),
+                dat = unlist(pred_sample))
+  })
+  models_crps[[m]] <- data.frame("country_id" = cm_pairs[,1],
+                                 "month_id" = cm_pairs[,2],
+                                 "crps" = crps_m)
+}
+names(models_crps) <- model_names
+save(models_crps, file = "output/models_crps_updated.RData")
 load("output/models_crps.RData")
+
+
+
+
+
 
 
 
@@ -307,7 +312,16 @@ crps_year <- data.frame("CRPS" = unlist(c(models_crps_conflict_year[,2:ncol(mode
                         "Situation" = rep(models_crps_conflict_year$situation_year, ncol(models_crps_conflict_year)-1),
                         "Model" = rep(names(models_crps_conflict_year)[2:ncol(models_crps_conflict_year)], each = 4))
 
+# print CRPS contribution of peace months
 print(colSums(models_crps_conflict_month[4,2:ncol(models_crps_conflict_month)] ))
+print(colSums(models_crps_conflict_year[4,2:ncol(models_crps_conflict_year)] ))
+
+# print overall CRPS per model
+print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),2:ncol(models_crps_conflict_month)] ))[8]
+print(colSums(models_crps_conflict_year[1:nrow(models_crps_conflict_year),2:ncol(models_crps_conflict_year)] ))
+
+print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),20]), digits = 20)
+
 
 
 # CRPS decomposition monthly
@@ -1470,7 +1484,7 @@ brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = c
   facet_grid(model ~ ., switch = "y") +
   coord_flip() +
   scale_fill_manual(
-    values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "darkgreen","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
+    values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
     ###################################
     breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
     ##################################
