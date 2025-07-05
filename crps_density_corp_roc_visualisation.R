@@ -474,67 +474,254 @@ theme_setup <- ggplot2::theme(
 
 
 
-
-
-
-
-
-
-
 ## -----------------------------------------------------------------------------
 ## distribution of onset probabilities >= 0
 ## -----------------------------------------------------------------------------
 
+# ideal forecast would have everything green for p close to 0 and 
+# everything yellow for high probabilities (p close to 1).
+
+# kernel density estimation parameter
+adjust_value <- 0.4
+
+
+# used for >= and > 0
+create_distribution_plot <- function(data, model_name){
+  
+  filter_data <- data %>%
+    filter(model == model_name)
+  
+  p <- ggplot(data = filter_data, aes(x = onset_prob_pred)) +
+    # "peace" and "onset" density (i.e. "previous peace")
+    geom_density(aes(y = after_stat(density), fill = "previous peace"), 
+                 alpha = 0.9, 
+                 size = 0.8,
+                 adjust = adjust_value) +
+    
+    # "onset" density weighted relative to overall dist of prev_peace_prob_month_long
+    geom_density(data = filter(filter_data, situation_month == "onset"),
+                 aes(y = after_stat(density) * nrow(filter(filter_data, situation_month == "onset")) / nrow(filter_data),
+                     fill = "onset"),
+                 alpha = 0.8,
+                 size = 0.8,
+                 adjust = adjust_value) +
+    
+    scale_y_sqrt() +
+    
+    scale_fill_manual(name="conflict situation",
+                      values=c("previous peace"="#556B2F","onset"="#df9b1b")) + 
+    theme_minimal_grid() +
+    labs( 
+      title = model_labels[model_name]
+    ) +
+    coord_fixed() +
+    # x-Achse: Breaks bei 0, .25, .5, .75, 1
+    scale_x_continuous(
+      limits = c(0, 1),
+      breaks = seq(0, 1, by = 0.25)
+    ) +
+    theme(
+      panel.background = element_blank(),
+      plot.title = element_text(size = 15, hjust = 0.5, face = "plain"),
+      legend.position = "none",
+      aspect.ratio = 1,
+      panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank()
+    )
+  
+  
+  if(model_name == "zero"){
+    
+    
+    p <- p +
+      annotate(
+        "rect",
+        xmin   = 0,
+        ymin   = 0,
+        xmax   = 0.1,
+        ymax   = 2,
+        fill   = "transparent",
+        colour = "black",
+        size   = 0.7
+      )
+  }
+  
+  if(model_name == "submission_final_gpcmm"){
+    
+    
+    p <- p +
+      annotate(
+        "rect",
+        xmin   = 0.9,
+        ymin   = 0,
+        xmax   = 1,
+        ymax   = 2,
+        fill   = "transparent",
+        colour = "black",
+        size   = 0.7
+      )
+  }
+  
+  
+  
+  
+  return(p)
+  
+}
+
+
+#create common x and y labels
+# used for >= and > 0
+y_density.grob <- textGrob("Density", 
+                           gp=gpar(col="black", fontsize=15), rot=90)
+
+x_density.grob <- textGrob("Forecast value", 
+                           gp=gpar(col="black", fontsize=15))
+
+
 ## ---
 ## In-depth: 8 models
 ## ---
+# list to store the density plots
+density_greqZero_list_selected <- list()
 
-# ideal forecast would have everything green for p close to 0 and 
-# everything yellow for high probabilities (p close to 1).
-density_decomposition_previous_peace_month_curves_with_zero <- ggplot(data = prev_peace_prob_month_long, aes(x = onset_prob_pred)) +
-  # "peace" and "onset" density (i.e. "previous peace")
-  geom_density(aes(y = after_stat(density), fill = "previous peace"), 
-               alpha = 0.9, 
-               size = 0.8,
-               adjust = 0.2) +
+for (model_name in selected_models) {
   
-  # "onset" density weighted relative to overall dist of prev_peace_prob_month_long
-  geom_density(data = filter(decomp_prev_peace_prob_month_long, situation_month == "onset"),
-               aes(y = after_stat(density) * nrow(filter(decomp_prev_peace_prob_month_long, situation_month == "onset")) / nrow(decomp_prev_peace_prob_month_long),
-                   fill = "onset"),
-               alpha = 0.8,
-               size = 0.8,
-               adjust = 0.2) +
+  plot <- create_distribution_plot(prev_peace_prob_month_long, model_name)
   
-  facet_wrap(~ model, scales = "free_y") +
+  density_greqZero_list_selected[[model_name]] <- list(plot = plot)
   
-  scale_y_sqrt() +
-  
-  scale_fill_manual(name="conflict situation",
-                    values=c("previous peace"="#556B2F","onset"="#df9b1b")) + 
-  
-  labs(
-    title = "Distribution of fatality probabilities in case of preavious peace (01-2018 to 12-2023, all countries)",
-    subtitle = "Reference: previous month, individual models",
-    x = "predicted probability",
-    y = "density"
-  ) +
-  
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 10, face = "bold"),
-    plot.title = element_text(face = "bold", size = 14)
-  )
+}
 
-density_decomposition_previous_peace_month_curves_with_zero
+# modify plot list
+density_greqZero_grid_modified_list_selected <- density_greqZero_list_selected
+
+density_greqZero_model_names_selected <- names(density_greqZero_grid_modified_list_selected)
 
 
+for(i in seq_along(density_greqZero_list_selected)){
+  
+  model <- density_greqZero_model_names_selected[i]
+  
+  p <- NULL
+  
+  if(i == 1){
+    p <- density_greqZero_grid_modified_list_selected[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if(i > 1 && i < 5){
+    p <- density_greqZero_grid_modified_list_selected[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if(i == 5){
+    p <- density_greqZero_grid_modified_list_selected[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else {
+    p <- density_greqZero_grid_modified_list_selected[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  }
+  
+  
+  density_greqZero_grid_modified_list_selected[[model]]$plot <- p
+  
+}
+
+plots_density_greqZero_gird_modified_selected <- lapply(density_greqZero_grid_modified_list_selected, function(x) x$plot)
+
+# Kombiniere in einem 2x4 Layout
+p_density_greqZero_selected <- plot_grid(plotlist = plots_density_greqZero_gird_modified_selected, nrow = 2, ncol = 4, align = "hv", scale = 0.99)
+
+
+#add to plot
+density_greqZero_selected_models_plot <- grid.arrange(arrangeGrob(p_density_greqZero_selected, 
+                                                                  left = y_density.grob, 
+                                                                  bottom = x_density.grob))
+
+ggsave("final_plots/density_greqZero_selected_models.png",
+       plot = density_greqZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px")
 
 ## ---
 ## Remaining: 9 models
 ## ---
+# list to store the density plots
+density_greqZero_list_remaining <- list()
+
+for (model_name in remaining_models) {
+  
+  plot <- create_distribution_plot(prev_peace_prob_month_long, model_name)
+  
+  density_greqZero_list_remaining[[model_name]] <- list(plot = plot)
+  
+}
+
+# modify plot list
+density_greqZero_grid_modified_list_remaining <- density_greqZero_list_remaining
+
+density_greqZero_model_names_remaining <- names(density_greqZero_grid_modified_list_remaining)
 
 
+
+for(i in seq_along(density_greqZero_list_remaining)){
+  
+  model <- density_greqZero_model_names_remaining[i]
+  
+  p <- NULL
+  
+  if(i == 1 || i == 4){
+    p <- density_greqZero_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if((i > 1 && i < 4) || (i > 4 && i < 7)){
+    p <- density_greqZero_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if(i == 7){
+    p <- density_greqZero_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else {
+    p <- density_greqZero_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  }
+  
+  
+  density_greqZero_grid_modified_list_remaining[[model]]$plot <- p
+  
+}
+
+
+plots_density_greqZero_gird_modified_remaining <- lapply(density_greqZero_grid_modified_list_remaining, function(x) x$plot)
+
+# Kombiniere in einem 2x4 Layout
+p_density_greqZero_remaining <- plot_grid(plotlist = plots_density_greqZero_gird_modified_remaining, nrow = 3, ncol = 3, align = "hv", scale = 0.99)
+
+#add to plot
+density_greqZero_remaining_models_plot <- grid.arrange(arrangeGrob(p_density_greqZero_remaining, 
+                                                                    left = y_density.grob, 
+                                                                    bottom = x_density.grob))
+
+ggsave("final_plots/density_greqZero_remaining_models.png",
+       plot = density_greqZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px")
 
 
 
@@ -549,55 +736,153 @@ decomp_prev_peace_prob_month_long <- prev_peace_prob_month_long %>%
 ## ---
 ## In-depth: 8 models
 ## ---
+# list to store the density plots
+density_greatZero_list_selected <- list()
 
-# ideal forecast would have everything green for p close to 0 and 
-# everything yellow for high probabilities (p close to 1).
-density_decomposition_previous_peace_month_curves <- ggplot(data = decomp_prev_peace_prob_month_long, aes(x = onset_prob_pred)) +
-  # "peace" and "onset" density (i.e. "previous peace")
-  geom_density(aes(y = after_stat(density), fill = "previous peace"), 
-               alpha = 0.9, 
-               size = 0.8,
-               adjust = 0.2) +
+for (model_name in selected_models) {
   
-  # "onset" density weighted relative to overall dist of prev_peace_prob_month_long
-  geom_density(data = filter(decomp_prev_peace_prob_month_long, situation_month == "onset"),
-               aes(y = after_stat(density) * nrow(filter(decomp_prev_peace_prob_month_long, situation_month == "onset")) / nrow(decomp_prev_peace_prob_month_long),
-                   fill = "onset"),
-               alpha = 0.8,
-               size = 0.8,
-               adjust = 0.2) +
+  plot <- create_distribution_plot(decomp_prev_peace_prob_month_long, model_name)
   
-  facet_wrap(~ model, scales = "free_y") +
+  density_greatZero_list_selected[[model_name]] <- list(plot = plot)
   
-  scale_y_sqrt() +
-  
-  scale_fill_manual(name="conflict situation",
-                    values=c("previous peace"="#556B2F","onset"="#df9b1b")) + 
-  
-  labs(
-    title = "Distribution of fatality probabilities greater zero in case of preavious peace (01-2018 to 12-2023, all countries)",
-    subtitle = "Reference: previous month, individual models",
-    x = "predicted probability",
-    y = "density"
-  ) +
-  
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 10, face = "bold"),
-    plot.title = element_text(face = "bold", size = 14)
-  )
+}
 
-density_decomposition_previous_peace_month_curves
+# modify plot list
+density_greatZero_grid_modified_list_selected <- density_greatZero_list_selected
 
-# ggsave("plots_tobi/density_decomposition_previous_peace_month.png", 
-#        plot = density_decomposition_previous_peace_month_curves, width = 20, height = 12, dpi = 300, bg = "white")
+density_greatZero_model_names_selected <- names(density_greatZero_grid_modified_list_selected)
+
+
+for(i in seq_along(density_greatZero_list_selected)){
+  
+  model <- density_greatZero_model_names_selected[i]
+  
+  p <- NULL
+  
+  if(i == 1){
+    p <- density_greatZero_grid_modified_list_selected[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if(i > 1 && i < 5){
+    p <- density_greatZero_grid_modified_list_selected[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if(i == 5){
+    p <- density_greatZero_grid_modified_list_selected[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else {
+    p <- density_greatZero_grid_modified_list_selected[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  }
+  
+  
+  density_greatZero_grid_modified_list_selected[[model]]$plot <- p
+  
+}
+
+plots_density_greatZero_gird_modified_selected <- lapply(density_greatZero_grid_modified_list_selected, function(x) x$plot)
+
+# Kombiniere in einem 2x4 Layout
+p_density_greatZero_selected <- plot_grid(plotlist = plots_density_greatZero_gird_modified_selected, nrow = 2, ncol = 4, align = "hv", scale = 0.99)
+
+#create common x and y labels
+y_density_greatZero_.grob <- textGrob("Density", 
+                                      gp=gpar(col="black", fontsize=15), rot=90)
+
+x_density_greatZero_.grob <- textGrob("Forecast value", 
+                                      gp=gpar(col="black", fontsize=15))
+
+#add to plot
+density_greatZero_selected_models_plot <- grid.arrange(arrangeGrob(p_density_greatZero_selected, 
+                                                                   left = y_density.grob, 
+                                                                   bottom = x_density.grob))
+
+ggsave("final_plots/density_greatZero_selected_models.png",
+       plot = density_greatZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px")
 
 
 
 ## ---
 ## Remaining: 9 models
 ## ---
+# list to store the density plots
+density_greatZero_list_remaining <- list()
 
+for (model_name in remaining_models) {
+  
+  plot <- create_distribution_plot(decomp_prev_peace_prob_month_long, model_name)
+  
+  density_greatZero_list_remaining[[model_name]] <- list(plot = plot)
+  
+}
+
+# modify plot list
+density_greatZero_grid_modified_list_remaining <- density_greatZero_list_remaining
+
+density_greatZero_model_names_remaining <- names(density_greatZero_grid_modified_list_remaining)
+
+
+
+for(i in seq_along(density_greatZero_list_remaining)){
+  
+  model <- density_greatZero_model_names_remaining[i]
+  
+  p <- NULL
+  
+  if(i == 1 || i == 4){
+    p <- density_greatZero_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if((i > 1 && i < 4) || (i > 4 && i < 7)){
+    p <- density_greatZero_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if(i == 7){
+    p <- density_greatZero_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else {
+    p <- density_greatZero_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  }
+  
+  
+  density_greatZero_grid_modified_list_remaining[[model]]$plot <- p
+  
+}
+
+
+plots_density_greatZero_gird_modified_remaining <- lapply(density_greatZero_grid_modified_list_remaining, function(x) x$plot)
+
+# Kombiniere in einem 2x4 Layout
+p_density_greatZero_remaining <- plot_grid(plotlist = plots_density_greatZero_gird_modified_remaining, nrow = 3, ncol = 3, align = "hv", scale = 0.99)
+
+#add to plot
+density_greatZero_remaining_models_plot <- grid.arrange(arrangeGrob(p_density_greatZero_remaining, 
+                                                                   left = y_density.grob, 
+                                                                   bottom = x_density.grob))
+
+ggsave("final_plots/density_greatZero_remaining_models.png",
+       plot = density_greatZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px")
 
 
 
