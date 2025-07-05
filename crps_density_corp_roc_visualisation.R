@@ -388,8 +388,17 @@ model_labels <- c(
 ## -----
 ## Selected models
 ## -----
-selected_models <- c("zero","last","conflictology",
-                     "conflictforecast_v2", "submission_muchlinski_thornhill", "submission_final_omm", "unito_transformer", "Neg_Bin_GLMM")
+
+## --
+## change this if needed. everything else is dynamic!
+selected_models <- c("zero","last",
+                     "conflictology","conflictforecast_v2",
+                     "submission_muchlinski_thornhill", "submission_final_omm",
+                     "unito_transformer", "P_GLMM")
+##
+## --
+
+
 
 selected_colors <- c(
   "#009682",  # green  
@@ -604,7 +613,6 @@ crps_month_selected_models <- crps_month
 
 excluded_secondary_models <- c("submission_final_gpcmm", "submission_final_hpmm", "TW_GLMM",  "Neg_Bin_GLMM")
 
-
 crps_month_selected_models <- crps_month_selected_models[-which(crps_month_selected_models$Model %in% excluded_secondary_models), ]
 
 # Rename models
@@ -613,6 +621,13 @@ crps_month_selected_models$Model <- recode(
   !!!model_labels
 )
 
+# determine color of y-axis model names (black if selected for in-depth analysis)
+one_model_per_team_names <- unique(crps_month_selected_models$Model)[order(unique(crps_month_selected_models$Model))]
+selected_models_bool <- one_model_per_team_names %in% selected_model_labels 
+
+col_vec <- ifelse(selected_models_bool, "black", "grey40")
+
+# plot
 crps_conflict_situation_plot <- ggplot(crps_month_selected_models, 
                                        aes(fill = Situation, y = Model, x = .data[["CRPS"]])) + 
   geom_bar(position = "stack", stat = "identity") +
@@ -623,10 +638,12 @@ crps_conflict_situation_plot <- ggplot(crps_month_selected_models,
   theme_setup +
   theme(
     axis.ticks.y = element_blank(),
-    axis.text.y = element_text(colour = c("grey40","grey40","black","black","black","black",
-                                          "grey40","grey40","black","grey40","black","black","black")))
+    axis.text.y = element_text(colour = col_vec))
 
 crps_conflict_situation_plot
+
+ggsave("final_plots/crps_conflict_situation.png",
+         plot = crps_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px")
 
 
 ## -----------------------------------------------------------------------------
@@ -1130,7 +1147,6 @@ murphy_roc_selected_models_plot <- plot_grid(murphy_diagram_selected_models + th
                   nrow = 1,
                   rel_widths = c(1, 0, 1)
 )
-murphy_roc_selected_models_plot
 
 
 ## ---
@@ -1145,7 +1161,6 @@ murphy_roc_remaining_models_plot <- plot_grid(murphy_diagram_remaining_models + 
                                              nrow = 1,
                                              rel_widths = c(1, 0, 1)
 )
-murphy_roc_remaining_models_plot
 
 ## -----------------------------------------------------------------------------
 ## Merge Murpy Diagram, ROC curve and Reliability Diagram
@@ -1159,9 +1174,11 @@ new_triptych_selected <- grid.arrange(
   murphy_roc_selected_models_plot,
   reliability_diag_selected_models_plot,
   nrow = 2,
-  heights = c(1, 1.55)
+  heights = c(1, 0.895)
 )
 
+# ggsave("final_plots/tryptich_selected_models.png",
+#        plot = new_triptych_selected, width = 1.5 * 2100, height = 1.5 * 2200, dpi = 300, units = "px")
 
 ## ---
 ## Remaining: 9 models
@@ -1174,28 +1191,16 @@ new_triptych_remaining <- grid.arrange(
   heights = c(1, 1.65)
 )
 
-# ggsave("plots_tobi/tryptich_remaining_models.png", 
-#        plot = new_triptych_remaining, width = 600, height = 925, dpi = 90, units = "px")
-
-ggsave("plots_tobi/tryptich_remaining_models.png",
-       plot = new_triptych_remaining, width = 1.4 * 1875, height = 1.4 * 2890.6, dpi = 300, units = "px")
-
-
-
-
-
-
-
-
-
-
-
-
+# ggsave("final_plots/tryptich_remaining_models.png",
+#        plot = new_triptych_remaining, width = 1.4 * 1875, height = 1.4 * 2890.6, dpi = 300, units = "px")
 
 
 ## -----------------------------------------------------------------------------
 ## BRIER: MSC-DSC-plots
 ## -----------------------------------------------------------------------------
+
+## IMPORTANT: approach is not elegnat. possible add version with geom_rect later
+
 
 brier_decomposition_results <- map2(
   .x = models_scoring_rules,
@@ -1213,11 +1218,12 @@ brier_decomposition_results <- map2(
   }
 )
 
+
 ## ---
 ## In-depth: 8 models
 ## ---
 # filter for selected models
-brier_decomposition_results <- brier_decomposition_results[selected_models]
+brier_decomposition_results_selected <- brier_decomposition_results[selected_models]
 
 ## important remark for BRIER score:
 # UNC = variance of X~Ber(p=E(y)=mean(y)) -> p(1-p)
@@ -1225,15 +1231,15 @@ brier_decomposition_results <- brier_decomposition_results[selected_models]
 #mean(p)*(1-mean(p))
 
 # combine to one dataframe
-brier_score_decomposition <- bind_rows(brier_decomposition_results) %>%
+brier_score_decomposition_selected <- bind_rows(brier_decomposition_results_selected) %>%
   select(model, mean_score, MCB, DSC, UNC) %>%
   rename(MeanScore = mean_score)
 
-brier_score_decomposition_barplot <- brier_score_decomposition %>%
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_selected %>%
   mutate(score_invisible = MeanScore, gap = 0, gap1=0, gap2 = 0)
 
 # data frame with format for the barchart
-brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
   arrange(MeanScore) %>%  # sort by MeanScore
   pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap, gap1, gap2),
                names_to = "component",
@@ -1248,18 +1254,18 @@ brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
   )) %>%
   select(model, class, component, value)
 
-brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
   mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
 
 
 # dataset for model orderbased on MeanScore
-brier_levs <- brier_score_decomposition_barplot %>%
+brier_levs_selected <- brier_score_decomposition_barplot_selected %>%
   filter(component == "MeanScore") %>%
   arrange(desc(value)) %>%
   pull(model)
 
 # data for the plot
-brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
   mutate(
     class_group = case_when(
       class == "MCB_UNC"   ~ 1,
@@ -1270,42 +1276,44 @@ brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
       class == "GAPdscUNC" ~ 6
       
     ),  
-    model = factor(model, levels = brier_levs, ordered = TRUE)
+    model = factor(model, levels = brier_levs_selected, ordered = TRUE)
   )
 
-brier_score_decomposition_barplot$model <- recode(
-  brier_score_decomposition_barplot$model,
+brier_score_decomposition_barplot_selected$model <- recode(
+  brier_score_decomposition_barplot_selected$model,
   !!!model_labels
 )
 
 
 # set order of subbars within group
-brier_score_decomposition_barplot$component <- factor(
-  brier_score_decomposition_barplot$component,
+brier_score_decomposition_barplot_selected$component <- factor(
+  brier_score_decomposition_barplot_selected$component,
   levels = c("gap", "gap1", "gap2", "MCB", "UNC", "DSC", "score_invisible", "MeanScore")
 )
 
 # set order of sub bars within group
-brier_score_decomposition_barplot$class_group <- factor(
-  brier_score_decomposition_barplot$class_group,
-  levels = c(4,1,6,2,5,3)    
+brier_score_decomposition_barplot_selected$class_group <- factor(
+  brier_score_decomposition_barplot_selected$class_group,
+  levels = c(4,1,6,2,3,5)    
 )
 
 # set width of mean score bar
-mean_score_bar <- 4.5
+mean_score_bar_selected <- 4.5
 # set width of mcb,dcs,unc bars
-msc_dsc_unc_bar <- 2
+msc_dsc_unc_bar_selected <- 2
 
 # width column
-brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
   mutate(
     wdth = case_when(
       # MeanScore
-      class_group == 3 ~ mean_score_bar, #4
+      class_group == 3 ~ mean_score_bar_selected, #4
       # MCB DSC
-      class_group %in% c(1, 2) ~ msc_dsc_unc_bar, #1
+      class_group %in% c(1, 2) ~ msc_dsc_unc_bar_selected, #1
       # gapswithin groups
-      class_group %in% c(5,6) ~ msc_dsc_unc_bar,
+      class_group == 6 ~ msc_dsc_unc_bar_selected,
+      # gap between groups top
+      class_group == 5 ~ 15,
       #gap between groups
       class_group == 4 ~ 8 #10
       
@@ -1313,15 +1321,15 @@ brier_score_decomposition_barplot <- brier_score_decomposition_barplot %>%
   )
 
 
-brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = class_group, y = value, fill = component)) +
-  geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot$wdth) +
+brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_selected, aes(x = class_group, y = value, fill = component)) +
+  geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot_selected$wdth) +
   facet_grid(model ~ ., switch = "y") +
   coord_flip() +
   scale_fill_manual(
     values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
-    ###################################
+    ##
     breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
-    ##################################
+    ##
     name = ""
   ) +
   labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
@@ -1346,20 +1354,312 @@ brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = c
     axis.text.x = ggplot2::element_text(size = 14)
   )
 
-brier_score_decomposition
+brier_score_decomposition_selected
+
+
+# ggsave("final_plots/brier_score_decomposition_selected.png",
+#        plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px")
+
+
 
 ## ---
 ## All models
 ## ---
+
+
+# combine to one dataframe
+brier_score_decomposition_all <- bind_rows(brier_decomposition_results) %>%
+  select(model, mean_score, MCB, DSC, UNC) %>%
+  rename(MeanScore = mean_score)
+
+brier_score_decomposition_barplot_all <- brier_score_decomposition_all %>%
+  mutate(score_invisible = MeanScore, gap = 0, gap1=0, gap2 = 0)
+
+# data frame with format for the barchart
+brier_score_decomposition_barplot_all <- brier_score_decomposition_barplot_all %>%
+  arrange(MeanScore) %>%  # sort by MeanScore
+  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap, gap1, gap2),
+               names_to = "component",
+               values_to = "value") %>%
+  mutate(class = case_when(
+    component %in% c("MeanScore") ~ "SCORE",
+    component %in% c("MCB", "UNC") ~ "MCB_UNC",
+    component %in% c("DSC", "score_invisible") ~ "DSC_score", 
+    component %in% c("gap") ~ "GAP",
+    component %in% c("gap1") ~ "GAPmeanscoreDSC",
+    component %in% c("gap2") ~ "GAPdscUNC",
+  )) %>%
+  select(model, class, component, value)
+
+brier_score_decomposition_barplot_all <- brier_score_decomposition_barplot_all %>%
+  mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
+
+
+# dataset for model orderbased on MeanScore
+brier_levs_all <- brier_score_decomposition_barplot_all %>%
+  filter(component == "MeanScore") %>%
+  arrange(desc(value)) %>%
+  pull(model)
+
+# data for the plot
+brier_score_decomposition_barplot_all <- brier_score_decomposition_barplot_all %>%
+  mutate(
+    class_group = case_when(
+      class == "MCB_UNC"   ~ 1,
+      class == "DSC_score"       ~ 2,
+      class == "SCORE" ~ 3,
+      class == "GAP" ~ 4,
+      class == "GAPmeanscoreDSC" ~ 5,
+      class == "GAPdscUNC" ~ 6
+      
+    ),  
+    model = factor(model, levels = brier_levs_all, ordered = TRUE)
+  )
+
+brier_score_decomposition_barplot_all$model <- recode(
+  brier_score_decomposition_barplot_all$model,
+  !!!model_labels
+)
+
+
+# set order of subbars within group
+brier_score_decomposition_barplot_all$component <- factor(
+  brier_score_decomposition_barplot_all$component,
+  levels = c("gap", "gap1", "gap2", "MCB", "UNC", "DSC", "score_invisible", "MeanScore")
+)
+
+# set order of sub bars within group
+brier_score_decomposition_barplot_all$class_group <- factor(
+  brier_score_decomposition_barplot_all$class_group,
+  levels = c(4,1,6,2,3,5)
+)
+
+# set width of mean score bar
+mean_score_bar_all <- 7
+# set width of mcb,dcs,unc bars
+msc_dsc_unc_bar_all <- 2
+
+# width column
+brier_score_decomposition_barplot_all <- brier_score_decomposition_barplot_all %>%
+  mutate(
+    wdth = case_when(
+      # MeanScore
+      class_group == 3 ~ mean_score_bar_all, #4
+      # MCB DSC
+      class_group %in% c(1, 2) ~ msc_dsc_unc_bar_all,#msc_dsc_unc_bar_all, #1
+      # gap between groups top
+      class_group == 5 ~ 15,
+      # gapswithin groups
+      class_group == 6 ~ 2,
+      # gap between groups bottom
+      class_group == 4 ~ 10 #10
+      
+    )
+  )
+
+
+brier_score_decomposition_all <- ggplot(brier_score_decomposition_barplot_all, aes(x = class_group, y = value, fill = component)) +
+  geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot_all$wdth) +
+  facet_grid(model ~ ., switch = "y") +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
+    ##
+    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
+    ##
+    name = ""
+  ) +
+  labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
+  theme_classic() +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+  theme(
+    panel.spacing = unit(0, "points"),
+    strip.background = element_blank(),
+    strip.placement = "outside",
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 15),
+    axis.text.y = element_blank(),
+    axis.ticks.length.y = unit(0, "points"),
+    axis.ticks.x = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "bottom",
+    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
+    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+    legend.title = ggplot2::element_text(size = 15),
+    legend.text = ggplot2::element_text(size = 14),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.x = ggplot2::element_text(size = 14)
+  )
+
+brier_score_decomposition_all
+
+ggsave("final_plots/brier_decomposition_all_models.png",
+       plot = brier_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px")
 
 
 ## -----------------------------------------------------------------------------
 ## LOG: MSC-DSC-plots
 ## -----------------------------------------------------------------------------
 
+
+
+log_decomposition_results <- map2(
+  .x = models_scoring_rules,
+  .y = names(models_scoring_rules),
+  .f = function(df, model_name) {
+    # caclulate MSC-DSC-UNC 
+    #@param score 
+    # A string specifying the score function.
+    #'   One of: `"Brier_score"` (default), `"log_score"`, `"MR_score"`.
+    result <- mcbdsc(df %>% select(onset_prob_pred), y = df$actual_conflict, score="log_score")
+    
+    # Extrahiere estimates + Modellname
+    estimates(result) %>%
+      mutate(model = model_name)
+  }
+)
+
+
 ## ---
 ## In-depth: 8 models
 ## ---
+# filter for selected models
+log_decomposition_results_selected <- log_decomposition_results[selected_models]
+
+## important remark for BRIER score:
+# UNC = variance of X~Ber(p=E(y)=mean(y)) -> p(1-p)
+#p <- models_scoring_rules$boot_240$actual_conflict
+#mean(p)*(1-mean(p))
+
+# combine to one dataframe
+log_score_decomposition_selected <- bind_rows(log_decomposition_results_selected) %>%
+  select(model, mean_score, MCB, DSC, UNC) %>%
+  rename(MeanScore = mean_score)
+
+log_score_decomposition_barplot_selected <- log_score_decomposition_selected %>%
+  mutate(score_invisible = MeanScore, gap = 0, gap1=0, gap2 = 0)
+
+# data frame with format for the barchart
+log_score_decomposition_barplot_selected <- log_score_decomposition_barplot_selected %>%
+  arrange(MeanScore) %>%  # sort by MeanScore
+  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap, gap1, gap2),
+               names_to = "component",
+               values_to = "value") %>%
+  mutate(class = case_when(
+    component %in% c("MeanScore") ~ "SCORE",
+    component %in% c("MCB", "UNC") ~ "MCB_UNC",
+    component %in% c("DSC", "score_invisible") ~ "DSC_score", 
+    component %in% c("gap") ~ "GAP",
+    component %in% c("gap1") ~ "GAPmeanscoreDSC",
+    component %in% c("gap2") ~ "GAPdscUNC",
+  )) %>%
+  select(model, class, component, value)
+
+log_score_decomposition_barplot_selected <- log_score_decomposition_barplot_selected %>%
+  mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
+
+
+# dataset for model orderbased on MeanScore
+log_levs_selected <- log_score_decomposition_barplot_selected %>%
+  filter(component == "MeanScore") %>%
+  arrange(desc(value)) %>%
+  pull(model)
+
+# data for the plot
+log_score_decomposition_barplot_selected <- log_score_decomposition_barplot_selected %>%
+  mutate(
+    class_group = case_when(
+      class == "MCB_UNC"   ~ 1,
+      class == "DSC_score"       ~ 2,
+      class == "SCORE" ~ 3,
+      class == "GAP" ~ 4,
+      class == "GAPmeanscoreDSC" ~ 5,
+      class == "GAPdscUNC" ~ 6
+      
+    ),  
+    model = factor(model, levels = log_levs_selected, ordered = TRUE)
+  )
+
+log_score_decomposition_barplot_selected$model <- recode(
+  log_score_decomposition_barplot_selected$model,
+  !!!model_labels
+)
+
+
+# set order of subbars within group
+log_score_decomposition_barplot_selected$component <- factor(
+  log_score_decomposition_barplot_selected$component,
+  levels = c("gap", "gap1", "gap2", "MCB", "UNC", "DSC", "score_invisible", "MeanScore")
+)
+
+# set order of sub bars within group
+log_score_decomposition_barplot_selected$class_group <- factor(
+  log_score_decomposition_barplot_selected$class_group,
+  levels = c(4,1,6,2,3,5)    
+)
+
+# set width of mean score bar
+mean_score_bar_selected <- 4.5
+# set width of mcb,dcs,unc bars
+msc_dsc_unc_bar_selected <- 2
+
+# width column
+log_score_decomposition_barplot_selected <- log_score_decomposition_barplot_selected %>%
+  mutate(
+    wdth = case_when(
+      # MeanScore
+      class_group == 3 ~ mean_score_bar_selected, #4
+      # MCB DSC
+      class_group %in% c(1, 2) ~ msc_dsc_unc_bar_selected, #1
+      # gapswithin groups
+      class_group == 6 ~ msc_dsc_unc_bar_selected,
+      # gap between groups top
+      class_group == 5 ~ 15,
+      #gap between groups
+      class_group == 4 ~ 8 #10
+      
+    )
+  )
+
+
+log_score_decomposition_selected <- ggplot(log_score_decomposition_barplot_selected, aes(x = class_group, y = value, fill = component)) +
+  geom_bar(stat = "identity", position = "stack", width = log_score_decomposition_barplot_selected$wdth) +
+  facet_grid(model ~ ., switch = "y") +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
+    ##
+    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
+    ##
+    name = ""
+  ) +
+  labs(title = "MSC-DSC Mean log Score Decomposition") + 
+  theme_classic() +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.05)) +
+  theme(
+    panel.spacing = unit(0, "points"),
+    strip.background = element_blank(),
+    strip.placement = "outside",
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 18),
+    axis.text.y = element_blank(),
+    axis.ticks.length.y = unit(0, "points"),
+    axis.ticks.x = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "bottom",
+    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
+    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+    legend.title = ggplot2::element_text(size = 15),
+    legend.text = ggplot2::element_text(size = 14),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.x = ggplot2::element_text(size = 14)
+  )
+
+log_score_decomposition_selected
+
+
+# ggsave("final_plots/log_score_decomposition_selected.png",
+#        plot = log_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px")
 
 
 
@@ -1367,3 +1667,133 @@ brier_score_decomposition
 ## ---
 ## All models
 ## ---
+
+
+# combine to one dataframe
+log_score_decomposition_all <- bind_rows(log_decomposition_results) %>%
+  select(model, mean_score, MCB, DSC, UNC) %>%
+  rename(MeanScore = mean_score)
+
+log_score_decomposition_barplot_all <- log_score_decomposition_all %>%
+  mutate(score_invisible = MeanScore, gap = 0, gap1=0, gap2 = 0)
+
+# data frame with format for the barchart
+log_score_decomposition_barplot_all <- log_score_decomposition_barplot_all %>%
+  arrange(MeanScore) %>%  # sort by MeanScore
+  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap, gap1, gap2),
+               names_to = "component",
+               values_to = "value") %>%
+  mutate(class = case_when(
+    component %in% c("MeanScore") ~ "SCORE",
+    component %in% c("MCB", "UNC") ~ "MCB_UNC",
+    component %in% c("DSC", "score_invisible") ~ "DSC_score", 
+    component %in% c("gap") ~ "GAP",
+    component %in% c("gap1") ~ "GAPmeanscoreDSC",
+    component %in% c("gap2") ~ "GAPdscUNC",
+  )) %>%
+  select(model, class, component, value)
+
+log_score_decomposition_barplot_all <- log_score_decomposition_barplot_all %>%
+  mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
+
+
+# dataset for model orderbased on MeanScore
+log_levs_all <- log_score_decomposition_barplot_all %>%
+  filter(component == "MeanScore") %>%
+  arrange(desc(value)) %>%
+  pull(model)
+
+# data for the plot
+log_score_decomposition_barplot_all <- log_score_decomposition_barplot_all %>%
+  mutate(
+    class_group = case_when(
+      class == "MCB_UNC"   ~ 1,
+      class == "DSC_score"       ~ 2,
+      class == "SCORE" ~ 3,
+      class == "GAP" ~ 4,
+      class == "GAPmeanscoreDSC" ~ 5,
+      class == "GAPdscUNC" ~ 6
+      
+    ),  
+    model = factor(model, levels = log_levs_all, ordered = TRUE)
+  )
+
+log_score_decomposition_barplot_all$model <- recode(
+  log_score_decomposition_barplot_all$model,
+  !!!model_labels
+)
+
+
+# set order of subbars within group
+log_score_decomposition_barplot_all$component <- factor(
+  log_score_decomposition_barplot_all$component,
+  levels = c("gap", "gap1", "gap2", "MCB", "UNC", "DSC", "score_invisible", "MeanScore")
+)
+
+# set order of sub bars within group
+log_score_decomposition_barplot_all$class_group <- factor(
+  log_score_decomposition_barplot_all$class_group,
+  levels = c(4,1,6,2,3,5)
+)
+
+# set width of mean score bar
+mean_score_bar_all <- 7
+# set width of mcb,dcs,unc bars
+msc_dsc_unc_bar_all <- 2
+
+# width column
+log_score_decomposition_barplot_all <- log_score_decomposition_barplot_all %>%
+  mutate(
+    wdth = case_when(
+      # MeanScore
+      class_group == 3 ~ mean_score_bar_all, #4
+      # MCB DSC
+      class_group %in% c(1, 2) ~ msc_dsc_unc_bar_all,#msc_dsc_unc_bar_all, #1
+      # gap between groups top
+      class_group == 5 ~ 15,
+      # gapswithin groups
+      class_group == 6 ~ 2,
+      # gap between groups bottom
+      class_group == 4 ~ 10 #10
+      
+    )
+  )
+
+
+log_score_decomposition_all <- ggplot(log_score_decomposition_barplot_all, aes(x = class_group, y = value, fill = component)) +
+  geom_bar(stat = "identity", position = "stack", width = log_score_decomposition_barplot_all$wdth) +
+  facet_grid(model ~ ., switch = "y") +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
+    ##
+    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
+    ##
+    name = ""
+  ) +
+  labs(title = "MSC-DSC Mean log Score Decomposition") + 
+  theme_classic() +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+  theme(
+    panel.spacing = unit(0, "points"),
+    strip.background = element_blank(),
+    strip.placement = "outside",
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 15),
+    axis.text.y = element_blank(),
+    axis.ticks.length.y = unit(0, "points"),
+    axis.ticks.x = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "bottom",
+    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
+    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+    legend.title = ggplot2::element_text(size = 15),
+    legend.text = ggplot2::element_text(size = 14),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.x = ggplot2::element_text(size = 14)
+  )
+
+log_score_decomposition_all
+
+# ggsave("final_plots/log_score_decomposition_all_models.png",
+#        plot = log_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px")
