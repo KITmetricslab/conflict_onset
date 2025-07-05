@@ -56,7 +56,7 @@ data_path <- ifelse(os == "Windows",
 # actual data from 2018-2023 in the directory
 files_actuals_from18 <- list.files(data_path, pattern = "cm_actuals_\\d{4}\\.parquet", full.names = TRUE)
 # read all files and bind them into a single data frame
-observations_18_24 <- do.call(rbind, lapply(files_actuals_from18, arrow::read_parquet)) # observations from 2018 - 2024
+observations_18_23 <- do.call(rbind, lapply(files_actuals_from18, arrow::read_parquet)) # observations from 2018 - 2023
 
 ## -----
 # load predictive samples from benchmark models and submitted forecasts
@@ -92,27 +92,14 @@ for (m in 1:length(model_names)) {
 names(predictive_samples) <- model_names
 
 
-## -----
-## excluded models
-## -----
 
-# exclude some models for all plots and analysis
-excluded_models <- c("P_GLMM","TW_GLMM","submission_final_gpcmm","submission_final_hpmm","Neg_Bin_GAM", "P_GAM", "TW_GAM")
-
-# later on in the CORP, Murphy diagram section there will be even more models removed.
-# but this is only for the detailed analyis. 
-# For the general analysis only "excluded_models" are removed
-
-
-
-
-### CRPS/Brier-score: visualisation (Lotta)-------------------------------------------------------------------------
+### CRPS -BRIER - LOG Score Calculation -------------------------------------------------------------------------
 
 ## -----
 # compute crps on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
 ## -----
 
-country_ids <- unique(observations_18_24$country_id)
+country_ids <- unique(observations_18_23$country_id)
 actuals_ids <- 457:528 # month_ids for 01-2018, 02-2018, ..., 12-2023
 cm_pairs <- cbind(rep(country_ids, each = length(actuals_ids)),
                   rep(actuals_ids, length(country_ids)))
@@ -123,7 +110,7 @@ models_crps <- list()
 # for (m in 1:n_models) {
 #   crps_m <- apply(cm_pairs, 1, function(cm_pair) {
 #     print(paste0("Benchmark/model (", m, "/", n_models, "): ", model_names[m], ", country: ", cm_pair[1], ", month: ", cm_pair[2]))
-#     true_observation <- observations_18_24 %>%
+#     true_observation <- observations_18_23 %>%
 #       filter(country_id == cm_pair[1] & month_id == cm_pair[2]) %>%
 #       select(outcome)
 #     pred_sample <- predictive_samples[[m]] %>%
@@ -165,7 +152,7 @@ names(models_scoring_rules) <- model_names
 # add the acutal observations to list
 models_scoring_rules <- lapply(models_scoring_rules, function(df) {
   df %>%
-    left_join(observations_18_24 %>%
+    left_join(observations_18_23 %>%
                 select(country_id, month_id, actual = outcome),
               by = c("country_id", "month_id"))
 })
@@ -181,8 +168,6 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
 
 # remove lists that are not longer needed
 rm(models_predictive_probabilities, models_crps)
-
-
 
 
 ## -----
@@ -207,8 +192,25 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
 
 
 
+## -----
+## REMOVE excluded models
+## -----
+# exclude some models for all plots and analysis
+excluded_models <- c("Neg_Bin_GAM", "P_GAM", "TW_GAM")
+
+# delete models
+models_scoring_rules <- models_scoring_rules[
+  ! names(models_scoring_rules) %in% excluded_models
+]
+
+model_names <- names(models_scoring_rules)
+n_models <- length(model_names)
 
 
+
+
+
+### CRPS -BRIER - LOG Score Plot Data Preparation -------------------------------------------------------------------------
 
 ## -----
 # label observations as either peace ("peace"), conflict onset ("onset"), ongoing conflict ("conflict") or end of conflict ("deescalation")
@@ -222,16 +224,16 @@ observations_17 <- arrow::read_parquet(paste0(data_path,"cm_features.parquet")) 
   filter(month_id %in% 445:456) %>%
   rename(outcome = ged_sb)
 
-observations_17_24 <- rbind(observations_17[,colnames(observations_18_24)], observations_18_24) %>%
+observations_17_23 <- rbind(observations_17[,colnames(observations_18_23)], observations_18_23) %>%
   arrange(country_id, month_id)
 
-actual_conflict <- observations_17_24 %>%
+actual_conflict <- observations_17_23 %>%
   filter(country_id %in% country_ids) %>%
   filter(month_id %in% actuals_ids) %>%
   mutate(conflict = outcome>0)
 
 prev_conflict <- list_cbind(lapply(1:12, function(prev_month) {
-  observations_17_24 %>%
+  observations_17_23 %>%
     filter(country_id %in% country_ids) %>%
     filter(month_id %in% (actuals_ids - prev_month)) %>%
     transmute(conflict = outcome>0)
@@ -258,31 +260,7 @@ conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = 
 
 
 ## -----
-## Generic plot function
-## -----
-create_score_decomposition_plot <- function(data, excluded_models, scoringRule, reference, conflictORpeace, xlimits = NULL) {
-  scoringRuleString <- scoringRule
-  if(scoringRule == "Brier"){
-    scoringRuleString <- "Brier score"
-  }
-  p <- ggplot(data[-which(data$Model %in% excluded_models), ], aes(fill = Situation, y = Model, x = .data[[scoringRule]])) + 
-    geom_bar(position = "stack", stat = "identity") +
-    scale_fill_manual("legend", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa")) +
-    ggtitle(paste0("Contribution to the average ", scoringRuleString ," ", conflictORpeace, " (01-2018 to 12-2023, all countries)"), 
-            subtitle = paste0( "Reference: ", reference)) +
-    xlab(paste0("Contribution to average ", scoringRuleString, " ", conflictORpeace))
-  
-  if (!is.null(xlimits)) {
-    p <- p + xlim(xlimits)
-  }
-  return(p)
-}
-
-
-
-
-## -----
-## Plot CRPS values by conflict situation
+## Plot Data: CRPS values by conflict situation
 ## -----
 models_crps_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "crps")) %>%
   reduce(left_join, c("country_id", "month_id"))
@@ -292,41 +270,24 @@ names(models_crps_conflict) <- c("country_id", "month_id", model_names)
 models_crps_conflict <- list(models_crps_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
 
 models_crps_conflict_month <- models_crps_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum)
-models_crps_conflict_year <- models_crps_conflict %>% select(!c("country_id", "month_id", "situation_month")) %>% group_by(situation_year) %>% summarise_all(sum)
 
 models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] <- models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] / nrow(models_crps_conflict) # compute contributions to average CRPS
-models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] <- models_crps_conflict_year[,2:ncol(models_crps_conflict_year)] / nrow(models_crps_conflict) # compute contributions to average CRPS
 
 
 # create ggplot data frames
 crps_month <- data.frame("CRPS" = unlist(c(models_crps_conflict_month[,2:ncol(models_crps_conflict_month)])),
                          "Situation" = rep(models_crps_conflict_month$situation_month, ncol(models_crps_conflict_month)-1),
                          "Model" = rep(names(models_crps_conflict_month)[2:ncol(models_crps_conflict_month)], each = 4))
-crps_year <- data.frame("CRPS" = unlist(c(models_crps_conflict_year[,2:ncol(models_crps_conflict_year)])),
-                        "Situation" = rep(models_crps_conflict_year$situation_year, ncol(models_crps_conflict_year)-1),
-                        "Model" = rep(names(models_crps_conflict_year)[2:ncol(models_crps_conflict_year)], each = 4))
 
 # print CRPS contribution of peace months
 print(colSums(models_crps_conflict_month[4,2:ncol(models_crps_conflict_month)] ))
-print(colSums(models_crps_conflict_year[4,2:ncol(models_crps_conflict_year)] ))
 
 # print overall CRPS per model
 print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),2:ncol(models_crps_conflict_month)] ))
-print(colSums(models_crps_conflict_year[1:nrow(models_crps_conflict_year),2:ncol(models_crps_conflict_year)] ))
-
-print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),21]), digits = 20)
-
-
-
-# CRPS decomposition monthly
-create_score_decomposition_plot(crps_month, excluded_models, "CRPS", "previous month", "per conflict situation")
-
-# CRPS decomposition yearly
-create_score_decomposition_plot(crps_year, excluded_models, "CRPS", "previous year", "per conflict situation")
 
 
 ## -----
-## Plot Brier values by conflict situation
+## Plot Data: Brier values by conflict situation
 ## -----
 models_brier_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "brier_onset")) %>%
   reduce(left_join, c("country_id", "month_id"))
@@ -339,59 +300,18 @@ models_brier_conflict <- list(models_brier_conflict, conflict_situations) %>% re
 # a) create ggplots of contributions to average Brier scores for all conflict situations
 ## -----
 models_brier_conflict_month <- models_brier_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum)
-models_brier_conflict_year <- models_brier_conflict %>% select(!c("country_id", "month_id", "situation_month")) %>% group_by(situation_year) %>% summarise_all(sum)
 
 models_brier_conflict_month[,2:ncol(models_brier_conflict_month)] <- models_brier_conflict_month[,2:ncol(models_brier_conflict_month)] / nrow(models_brier_conflict) # compute contributions to average brier
-models_brier_conflict_year[,2:ncol(models_brier_conflict_year)] <- models_brier_conflict_year[,2:ncol(models_brier_conflict_year)] / nrow(models_brier_conflict) # compute contributions to average brier
 
 brier_month <- data.frame("Brier" = unlist(c(models_brier_conflict_month[,2:ncol(models_brier_conflict_month)])),
                           "Situation" = rep(models_brier_conflict_month$situation_month, ncol(models_brier_conflict_month)-1),
                           "Model" = rep(names(models_brier_conflict_month)[2:ncol(models_brier_conflict_month)], each = 4))
-brier_year <- data.frame("Brier" = unlist(c(models_brier_conflict_year[,2:ncol(models_brier_conflict_year)])),
-                         "Situation" = rep(models_brier_conflict_year$situation_year, ncol(models_brier_conflict_year)-1),
-                         "Model" = rep(names(models_brier_conflict_year)[2:ncol(models_brier_conflict_year)], each = 4))
-
-
-# Brier score decomposition monthly
-create_score_decomposition_plot(brier_month, excluded_models, "Brier", "previous month", "per conflict situation", c(0.0, 1))
-
-# Brier score decomposition yearly
-create_score_decomposition_plot(brier_year, excluded_models, "Brier", "previous year", "per conflict situation", c(0.0, 1))
-
-
-## -----
-# b) create ggplots of contributions to average Brier scores for previously no conflict, i.e. "peace" and "onset"
-## -----
-models_brier_prev_peace_month <- models_brier_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum) %>% filter(situation_month %in% c("peace", "onset"))
-models_brier_prev_peace_year <- models_brier_conflict %>% select(!c("country_id", "month_id", "situation_month")) %>% group_by(situation_year) %>% summarise_all(sum) %>% filter(situation_year %in% c("peace", "onset"))
-
-models_brier_prev_peace_month[,2:ncol(models_brier_prev_peace_month)] <- models_brier_prev_peace_month[,2:ncol(models_brier_prev_peace_month)] / nrow(models_brier_conflict %>% filter(situation_month %in% c("peace", "onset"))) # compute contributions to average brier
-models_brier_prev_peace_year[,2:ncol(models_brier_prev_peace_year)] <- models_brier_prev_peace_year[,2:ncol(models_brier_conflict_year)] / nrow(models_brier_conflict %>% filter(situation_year %in% c("peace", "onset"))) # compute contributions to average brier
-
-brier_prev_peace_month <- data.frame("Brier" = unlist(c(models_brier_prev_peace_month[,2:ncol(models_brier_prev_peace_month)])),
-                                     "Situation" = rep(models_brier_prev_peace_month$situation_month, ncol(models_brier_prev_peace_month)-1),
-                                     "Model" = rep(names(models_brier_prev_peace_month)[2:ncol(models_brier_prev_peace_month)], each = 2))
-brier_prev_peace_year <- data.frame("Brier" = unlist(c(models_brier_prev_peace_year[,2:ncol(models_brier_prev_peace_year)])),
-                                    "Situation" = rep(models_brier_prev_peace_year$situation_year, ncol(models_brier_prev_peace_year)-1),
-                                    "Model" = rep(names(models_brier_prev_peace_year)[2:ncol(models_brier_prev_peace_year)], each = 2))
-
-# Brier score decomposition monthly
-create_score_decomposition_plot(brier_prev_peace_month, excluded_models, "Brier", "previous month", "in case of previous peace", c(0.0, 1))
-
-# Brier score decomposition yearly
-create_score_decomposition_plot(brier_prev_peace_year, excluded_models, "Brier", "previous year", "in case of previous peace", c(0.0, 1))
-
-#colSums(models_brier_prev_peace_year[,2:ncol(models_crps_conflict_month)] )
 
 
 
-
-
-
-
-## -----
-## Plot log-score values by conflict situation for the onset problem (y \in {0,1})
-## -----
+## ---
+## Plot-Data: log-score values by conflict situation for the onset problem (y \in {0,1})
+## ---
 models_logscore_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "log_score_eps_onset")) %>%
   reduce(left_join, c("country_id", "month_id"))
 
@@ -400,38 +320,13 @@ names(models_logscore_conflict) <- c("country_id", "month_id", model_names)
 models_logscore_conflict <- list(models_logscore_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
 
 models_logscore_conflict_month <- models_logscore_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum)
-models_logscore_conflict_year <- models_logscore_conflict %>% select(!c("country_id", "month_id", "situation_month")) %>% group_by(situation_year) %>% summarise_all(sum)
 
 models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] <- models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] / nrow(models_logscore_conflict) # compute contributions to average CRPS
-models_logscore_conflict_year[,2:ncol(models_logscore_conflict_year)] <- models_logscore_conflict_year[,2:ncol(models_logscore_conflict_year)] / nrow(models_logscore_conflict) # compute contributions to average CRPS
 
 
-# create ggplot data frames
-logscore_month <- data.frame("logscore" = unlist(c(models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)])),
-                         "Situation" = rep(models_logscore_conflict_month$situation_month, ncol(models_logscore_conflict_month)-1),
-                         "Model" = rep(names(models_logscore_conflict_month)[2:ncol(models_logscore_conflict_month)], each = 4))
-logscore_year <- data.frame("logscore" = unlist(c(models_logscore_conflict_year[,2:ncol(models_logscore_conflict_year)])),
-                        "Situation" = rep(models_logscore_conflict_year$situation_year, ncol(models_logscore_conflict_year)-1),
-                        "Model" = rep(names(models_logscore_conflict_year)[2:ncol(models_logscore_conflict_year)], each = 4))
-
-print(colSums(models_logscore_conflict_month[4,2:ncol(models_logscore_conflict_month)] ))
-
-
-# CRPS decomposition monthly
-create_score_decomposition_plot(logscore_month, excluded_models, "logscore", "previous month", "per conflict situation")
-
-# CRPS decomposition yearly
-create_score_decomposition_plot(logscore_year, excluded_models, "logscore", "previous year", "per conflict situation")
-
-
-
-
-
-
-
-
-
-### distribution of onset probabilities : visualisation (Tobi)-------------------------------------------------------------------------
+## ---
+## Data for Onset Prediction
+## ---
 
 # dataframe to store onset probabilities in long format
 prob_models_all_situation_long <- data.frame(
@@ -444,7 +339,7 @@ prob_models_all_situation_long <- data.frame(
 )
 
 # iterate over all models except the excluded_model in models_predictive_probabilities
-for (model_name in setdiff(names(models_scoring_rules), excluded_models)) {
+for (model_name in names(models_scoring_rules)) {
   
   joined_data <- models_scoring_rules[[model_name]] %>%
     inner_join(conflict_situations, by = c("month_id", "country_id")) %>%
@@ -453,196 +348,198 @@ for (model_name in setdiff(names(models_scoring_rules), excluded_models)) {
   # add to dataframe
   prob_models_all_situation_long <- bind_rows(prob_models_all_situation_long, joined_data)
 }
-# tail(prob_models_all_situation_long)
-
-
-#length(which(prob_models_all_situation_long$situation_year == "onset"))/(length(model_names)-3)
-
-
-## -----
-## Generic plot functions
-## -----
-
-## density -----
-##
-## Achtung: dichte wird geglättet (siehe zero modell) -> adjust einstellen
-create_density_plot <- function(data, individual, reference, onsetORpeace) {
-  
-  individual_string <- "individual models"
-  fill_color <- ""
-  
-  if(individual == FALSE){
-    individual_string <- "all models"
-  }
-  
-  if(onsetORpeace == "peace"){
-    fill_color <- "#4664aa"
-  } else if(onsetORpeace == "onset"){
-    fill_color <- "#df9b1b"
-  } else if(onsetORpeace == "previous peace") {
-    fill_color <- "#556B2F" #  #5F2F4F
-  }
-  
-  p <- ggplot(data, aes(x = onset_prob_pred)) +
-    geom_density(fill = fill_color, alpha = 0.6, linewidth = 0.8, adjust = 0.2) + 
-    labs(
-      title = paste0("Distribution of fatality probabilities in case of ", onsetORpeace, " (01-2018 to 12-2023, all countries)"),
-      subtitle = paste0( "Reference: ", reference, ", ", individual_string),
-      x = "predicted probability",
-      y = "density"
-    ) +
-    theme_minimal() +
-    theme(
-      strip.text = element_text(size = 10, face = "bold"),
-      plot.title = element_text(face = "bold", size = 14)
-    )
-  
-  if(individual == TRUE){
-    p <- p + facet_wrap(~ model, scales = "free_y")  # facet for each model
-  }
-  
-  return(p)
-}
-
-## boxpolot -----
-create_box_plot <- function(data, individual, reference, onsetORpeace) {
-  
-  individual_string <- "individual models"
-  fill_color <- ""
-  
-  if(individual == FALSE){
-    individual_string <- "all models"
-  }
-  
-  if(onsetORpeace == "peace"){
-    fill_color <- "#4664aa"
-  } else if(onsetORpeace == "onset"){
-    fill_color <- "#df9b1b"
-  } else if(onsetORpeace == "previous peace") {
-    fill_color <- "#556B2F" #  #5F2F4F
-  }
-  
-  p <- ggplot(data, aes(x = onset_prob_pred)) +
-    geom_boxplot(fill = fill_color, alpha = 0.6, color = "black", linewidth = 0.6, outlier.color = "red", outlier.size = 1, width = 0.4) +
-    labs(
-      title = paste0("Boxplot of fatality probabilities in case of ", onsetORpeace, " (01-2018 to 12-2023, all countries)"),
-      subtitle = paste0( "Reference: ", reference, ", ", individual_string),
-      x = "predicted probability",
-      y = NULL
-    ) +
-    scale_y_continuous(
-      limits = c(-0.4, 0.4)
-    ) +
-    theme_minimal() +
-    theme(
-      strip.text = element_text(size = 10, face = "bold"),
-      plot.title = element_text(face = "bold", size = 14)
-    )
-  
-  if(individual == TRUE){
-    p <- p + facet_wrap(~ model, scales = "free_y")  # facet for each model
-  }
-  
-  return(p)
-}
-
-
-
-## -----
-## ongoing peace
-## -----
-
-# filter for "peace" month
-ongoing_peace_prob_month_long <- prob_models_all_situation_long %>%
-  filter(situation_month == "peace")
-
-ongoing_peace_prob_year_long <- prob_models_all_situation_long %>%
-  filter(situation_year == "peace")
-
-## density-plots -----
-# previous month
-#create_density_plot(ongoing_peace_prob_month_long,individual = TRUE, "previous month", "peace")
-# previous year
-#create_density_plot(ongoing_peace_prob_year_long,individual = TRUE, "previous year", "peace")
-
-# ## boxplots -----
-# # previous month
-# create_box_plot(ongoing_peace_prob_month_long,individual = TRUE, "previous month", "peace")
-# # previous year
-# create_box_plot(ongoing_peace_prob_year_long,individual = TRUE, "previous year", "peace")
-
-
-
-## -----
-## onset
-## -----
-
-# filter for "onset" month
-onset_prob_month_long <- prob_models_all_situation_long %>%
-  filter(situation_month == "onset")
-
-onset_prob_year_long <- prob_models_all_situation_long %>%
-  filter(situation_year == "onset")
-
-## density-plots -----
-# previous month
-#create_density_plot(onset_prob_month_long,individual = TRUE, "previous month", "onset")
-# previous year
-#create_density_plot(onset_prob_year_long,individual = TRUE, "previous year", "onset")
-
-# ## boxplots -----
-# # previous month
-# create_box_plot(onset_prob_month_long,individual = TRUE, "previous month", "onset")
-# # previous year
-# create_box_plot(onset_prob_year_long,individual = TRUE, "previous year", "onset")
-
-
-
-## -----
-## previous peace 
-## -----
 
 # filter for "onset" or "peace" month
 prev_peace_prob_month_long <- prob_models_all_situation_long %>%
   filter(situation_month == "peace" | situation_month == "onset")
 
-prev_peace_prob_year_long <- prob_models_all_situation_long %>%
-  filter(situation_year == "peace" | situation_year == "onset")
-
-## density-plots -----
-# previous month
-density_previous_peace_month_curves <- create_density_plot(prev_peace_prob_month_long,individual = TRUE, "previous month", "previous peace")
-density_previous_peace_month_curves
-# previous year
-#create_density_plot(prev_peace_prob_year_long,individual = TRUE, "previous year", "previous peace")
-
-# ggsave("plots_tobi/density_previous_peace_month.png", 
-#        plot = density_previous_peace_month_curves, width = 20, height = 12, dpi = 300, bg = "white")
-
-# ## boxplots -----
-# # previous month
-# create_box_plot(prev_peace_prob_month_long,individual = TRUE, "previous month", "previous peace")
-# # previous year
-# create_box_plot(prev_peace_prob_year_long,individual = TRUE, "previous year", "previous peace")
+# onset actuals
+prev_peace_prob_month_long_binary_actual <- prev_peace_prob_month_long %>%
+  mutate(actual = ifelse(actual >= 1, 1, 0))
 
 
 
 
-
-
-
-
-
-
-
+################################################################################
+## PLOTS
+################################################################################
+model_labels <- c(
+  "zero"                         = "VIEWS Zero",
+  "last"                         = "VIEWS Last",
+  "conflictology"                = "VIEWS Conflictology",
+  "conflictforecast_v2"          = "CFLT RF",
+  "submission_muchlinski_thornhill" = "MT ZeroInfl GAM",
+  "submission_final_omm"         = "RV O MM",
+  "submission_final_gpcmm"       = "RV GPC MM",
+  "submission_final_hpmm"        = "RV HP MM",
+  "unito_transformer"            = "UNITO NB Transformer",
+  "Neg_Bin_GLMM"                 = "BDT NB GLMM",
+  "tft"                          = "CCEW TFT",
+  "ShapeFinder"                  = "PACE ShapeFinder",
+  "quantile_forecast"            = "DB Quantile",
+  "boot_240"                     = "VIEWS Bootstrap",
+  "bodentien_rueter_negbin"      = "BR NB",
+  "P_GLMM"                       = "BDT P GLMM",
+  "TW_GLMM"                      = "BDT TW GLMM" 
+  
+)
 
 
 ## -----
-## previous peace density-decomposition-month for predicted prob. > 0!
+## Selected models
 ## -----
+selected_models <- c("zero","last","conflictology",
+                     "conflictforecast_v2", "submission_muchlinski_thornhill", "submission_final_omm", "unito_transformer", "Neg_Bin_GLMM")
+
+selected_colors <- c(
+  "#009682",  # green  
+  "#4664aa",  # blue
+  "#23a1e0",  # maygreen
+  "black", # grey
+  "#df9b1b",  # orange
+  "#8cb63c",  # yellow
+  "#a22223",  # red
+  "#a3107c"   # purple
+)
+
+selected_model_colors <- setNames(selected_colors, selected_models)
+
+selected_model_labels <- model_labels[selected_models]
+
+## -----
+## Remaining models
+## -----
+
+remaining_models <- setdiff(model_names, selected_models)
+
+remaining_colors <- c(
+  "#004B41",  # von "#009682"
+    "#233357",  # von "#4664aa"
+  "#19719D",  # von "#23a1e0"
+  "#4D4D4D",  # von "black"
+  "#6F4D0D",  # von "#df9b1b"
+  "#46631E",  # von "#8cb63c"
+  "#511111",  # von "#a22223"
+  "#51103C",   # von "#a3107c"
+  "#2B1A05"    # additional
+)
+
+remaining_model_colors <- setNames(remaining_colors, remaining_models)
+
+remaining_model_labels <- model_labels[remaining_models]
+
+model_colors <- c(
+  selected_model_colors,
+  remaining_model_colors
+)
+
+theme_setup <- ggplot2::theme(
+  plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+  axis.title = ggplot2::element_text(size = 13),
+  legend.title = ggplot2::element_text(size = 13),
+  axis.text = ggplot2::element_text(size = 12),
+  legend.text = ggplot2::element_text(size = 11)
+)
+
+
+## -----------------------------------------------------------------------------
+## Number of total fatalities worldwide per month, stacked bar plot
+## -----------------------------------------------------------------------------
+
+
+
+
+
+## -----------------------------------------------------------------------------
+## Number of Countries experiencing > 0 fatalities per month for the test window
+## -----------------------------------------------------------------------------
+
+
+
+
+## -----------------------------------------------------------------------------
+## Number of Onset events per month for the test window
+## -----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+## -----------------------------------------------------------------------------
+## distribution of onset probabilities >= 0
+## -----------------------------------------------------------------------------
+
+## ---
+## In-depth: 8 models
+## ---
+
+# ideal forecast would have everything green for p close to 0 and 
+# everything yellow for high probabilities (p close to 1).
+density_decomposition_previous_peace_month_curves_with_zero <- ggplot(data = prev_peace_prob_month_long, aes(x = onset_prob_pred)) +
+  # "peace" and "onset" density (i.e. "previous peace")
+  geom_density(aes(y = after_stat(density), fill = "previous peace"), 
+               alpha = 0.9, 
+               size = 0.8,
+               adjust = 0.2) +
+  
+  # "onset" density weighted relative to overall dist of prev_peace_prob_month_long
+  geom_density(data = filter(decomp_prev_peace_prob_month_long, situation_month == "onset"),
+               aes(y = after_stat(density) * nrow(filter(decomp_prev_peace_prob_month_long, situation_month == "onset")) / nrow(decomp_prev_peace_prob_month_long),
+                   fill = "onset"),
+               alpha = 0.8,
+               size = 0.8,
+               adjust = 0.2) +
+  
+  facet_wrap(~ model, scales = "free_y") +
+  
+  scale_y_sqrt() +
+  
+  scale_fill_manual(name="conflict situation",
+                    values=c("previous peace"="#556B2F","onset"="#df9b1b")) + 
+  
+  labs(
+    title = "Distribution of fatality probabilities in case of preavious peace (01-2018 to 12-2023, all countries)",
+    subtitle = "Reference: previous month, individual models",
+    x = "predicted probability",
+    y = "density"
+  ) +
+  
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+density_decomposition_previous_peace_month_curves_with_zero
+
+
+
+## ---
+## Remaining: 9 models
+## ---
+
+
+
+
+
+## -----------------------------------------------------------------------------
+## distribution of onset probabilities > 0
+## -----------------------------------------------------------------------------
 # filter dataset
 decomp_prev_peace_prob_month_long <- prev_peace_prob_month_long %>%
   filter(onset_prob_pred > 0)
+
+
+## ---
+## In-depth: 8 models
+## ---
 
 # ideal forecast would have everything green for p close to 0 and 
 # everything yellow for high probabilities (p close to 1).
@@ -688,267 +585,27 @@ density_decomposition_previous_peace_month_curves
 
 
 
-
-
-## -----
-## previous peace density-decomposition-month for predicted prob. >= 0 
-## -----
-
-# ideal forecast would have everything green for p close to 0 and 
-# everything yellow for high probabilities (p close to 1).
-density_decomposition_previous_peace_month_curves_with_zero <- ggplot(data = prev_peace_prob_month_long, aes(x = onset_prob_pred)) +
-  # "peace" and "onset" density (i.e. "previous peace")
-  geom_density(aes(y = after_stat(density), fill = "previous peace"), 
-               alpha = 0.9, 
-               size = 0.8,
-               adjust = 0.2) +
-  
-  # "onset" density weighted relative to overall dist of prev_peace_prob_month_long
-  geom_density(data = filter(decomp_prev_peace_prob_month_long, situation_month == "onset"),
-               aes(y = after_stat(density) * nrow(filter(decomp_prev_peace_prob_month_long, situation_month == "onset")) / nrow(decomp_prev_peace_prob_month_long),
-                   fill = "onset"),
-               alpha = 0.8,
-               size = 0.8,
-               adjust = 0.2) +
-  
-  facet_wrap(~ model, scales = "free_y") +
-  
-  scale_y_sqrt() +
-  
-  scale_fill_manual(name="conflict situation",
-                    values=c("previous peace"="#556B2F","onset"="#df9b1b")) + 
-  
-  labs(
-    title = "Distribution of fatality probabilities in case of preavious peace (01-2018 to 12-2023, all countries)",
-    subtitle = "Reference: previous month, individual models",
-    x = "predicted probability",
-    y = "density"
-  ) +
-  
-  theme_minimal() +
-  theme(
-    strip.text = element_text(size = 10, face = "bold"),
-    plot.title = element_text(face = "bold", size = 14)
-  )
-
-density_decomposition_previous_peace_month_curves_with_zero
+## ---
+## Remaining: 9 models
+## ---
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## Proportion of fatality probability exceeding x% (from previous peace for >0%, >1%, >2%, >5%) -----
-thresholds <- c(0, 0.01, 0.02, 0.05)
-
-prob_proportion_exceeding_thresh_df <- prev_peace_prob_month_long %>%
-  group_by(model) %>%
-  summarise(across(onset_prob_pred, list(
-    `t1` = ~ mean(. > thresholds[1], na.rm = TRUE), # . stands for column predictive_probability
-    `t2` = ~ mean(. > thresholds[2], na.rm = TRUE), # mean is sufficient due to True = 1, False = 0
-    `t3` = ~ mean(. > thresholds[3], na.rm = TRUE),
-    `t4` = ~ mean(. > thresholds[4], na.rm = TRUE)
-  ))) %>%
-  pivot_longer(cols = -model, names_to = "threshold", values_to = "percentage") %>%
-  pivot_wider(names_from = model, values_from = percentage) %>%
-  mutate(threshold = thresholds)
-
-for (i in seq_along(thresholds)) {
-  thresh <- thresholds[i]
-  
-  cat("\nProb. exceeding", thresh, ":\n")
-  print(setNames(colSums(prob_proportion_exceeding_thresh_df[i, 2:ncol(prob_proportion_exceeding_thresh_df)]),
-                 colnames(prob_proportion_exceeding_thresh_df)[2:ncol(prob_proportion_exceeding_thresh_df)]))
-}
-
-
-
-
-
-
-
-
-## -----
-## plot analysis inspired by the triptych (Dimitriades et. al.)
-## -----
-## at first plots for all 13 models are made, after that the final
-# 8 models for the in depth analysis are chosen
-
-## CORP (reliability diagram) -----
-prev_peace_prob_month_long_binary_actual <- prev_peace_prob_month_long %>%
-  mutate(actual = ifelse(actual >= 1, 1, 0))
-
-# list to store the CORP
-corp_plots_list <- list()
-
-for (model_name in setdiff(names(models_scoring_rules), excluded_models)) {
-  
-  reliability_data <- prev_peace_prob_month_long_binary_actual %>%
-    filter(model == model_name)
-  
-  r <- reliabilitydiag(x = reliability_data$onset_prob_pred, y = reliability_data$actual)
-  plot <- autoplot(r) + ggplot2::labs(
-    title = model_name,
-    x = "predicted probability",
-    y = "CEP") +
-    ggplot2::theme(
-      plot.title = ggplot2::element_text(size = 13)
-    )
-  
-  # hier potentiell noch mehr abspeichern
-  corp_plots_list[[model_name]] <- list(plot = plot)
-  
-}
-
-# extract all plots from list -> returns list
-plots_corp <- lapply(corp_plots_list, function(x) x$plot)
-
-# plot with grid arrange
-tg_corp <- textGrob('Reliability diagram of predicted fatality prob. in case of previous peace (01-2018 to 12-2023, all countries)', gp = gpar(fontsize = 18, fontface = 'bold'))
-sg_corp <- textGrob('Reference: previous month, individual models', gp = gpar(fontsize = 15))
-margin <- unit(0.5, "line")
-grided_corp <- gridExtra::grid.arrange(grobs = plots_corp, ncol = 5)
-corp_previous_peace_month_curves <- gridExtra::grid.arrange(tg_corp, sg_corp, grided_corp,
-                                                            heights = unit.c(grobHeight(tg_corp) + 1.2*margin, 
-                                                                             grobHeight(sg_corp) + margin, 
-                                                                             unit(1,"null")))
-                                       
-#ggsave("plots_tobi/corp_previous_peace_month.png", plot = corp_previous_peace_month_curves, width = 20, height = 12, dpi = 300)
-
-## ROC -----
-# list to store the roc diagrams
-roc_plots_list <- list()
-
-for (model_name in setdiff(names(models_scoring_rules), excluded_models)) {
-  
-  roc_data <- prev_peace_prob_month_long_binary_actual %>%
-    filter(model == model_name)
-  
-  mm <- mmdata(roc_data$onset_prob_pred, roc_data$actual)
-  
-  plot <- autoplot(evalmod(mm), curvetype = "ROC") + 
-    ggplot2::labs(
-      title = model_name,
-      x = "FPR",
-      y = "TPR") +
-    ggplot2::geom_line(size = 1) + 
-    ggplot2::theme(
-      plot.title = ggplot2::element_text(size = 13)
-    ) + 
-    ggplot2::scale_color_manual(values=c("#556B2F"))
-  
-  roc_plots_list[[model_name]] <- list(plot = plot)
-  
-}
-
-# extract all plots from list -> returns list
-plots_roc <- lapply(roc_plots_list, function(x) x$plot)
-
-# plot with grid arrange
-tg_roc <- textGrob('ROC diagram of predicted fatality prob. in case of previous peace (01-2018 to 12-2023, all countries)', gp = gpar(fontsize = 18, fontface = 'bold'))
-sg_roc <- textGrob('Reference: previous month, individual models', gp = gpar(fontsize = 15))
-grided_roc <- gridExtra::grid.arrange(grobs = plots_roc, ncol = 5)
-roc_previous_peace_month_curves <- gridExtra::grid.arrange(tg_roc, sg_roc, grided_roc,
-                                                           heights = unit.c(grobHeight(tg_roc) + 1.2*margin, 
-                                                                            grobHeight(sg_roc) + margin, 
-                                                                            unit(1,"null")))
-                                      
-#ggsave("plots_tobi/roc_previous_peace_month.png", plot = roc_previous_peace_month_curves, width = 20, height = 12, dpi = 300)                       
-
-
-
-## -----
-## murphy diagramm
-## -----
-murphy_data <- prev_peace_prob_month_long_binary_actual %>%
-  select(1:6,8) %>%
-  pivot_wider(names_from = model, values_from = onset_prob_pred) %>%
-  select(5:ncol(.)) 
-
-mr_conflict <- murphy(murphy_data, 
-                      y_var = "actual")
-
-
-df_est_conflict <- estimates(mr_conflict)
-murphy_plot <- ggplot(df_est_conflict) + 
-  geom_path(aes(x = knot, y = mean_score, col = forecast), linewidth = 0.6, alpha = 1) + 
-  labs(title = "Murphy diagram of predicted fatality prob. in case of previous peace (01-2018 to 12-2023, all countries)",
-       subtitle = "Reference: previous month, individual models")
-murphy_plot
-
-#ggsave("plots_tobi/murphy_previous_peace_month__selected.png", plot = selected_murphy_plot, width = 10, height = 9, dpi = 300)                       
-
-
-
-
-
-## ------------------------------------------------------------------------------------------------------------------------------
-## plots for selection of 8 models
-##-------------------------------------------------------------------------------------------------------------------------------
-selected_models <- c("zero","last","conflictology",
-                     "conflictforecast_v2", "submission_muchlinski_thornhill", "submission_final_omm", "unito_transformer", "Neg_Bin_GLMM")
-
-
-model_colors <- c(
-  "zero"                        = "#009682",  # green  
-  "last"                        = "#4664aa",  # blue
-  "conflictology"              = "#23a1e0",  # maygreen
-  "conflictforecast_v2"        = "black", # grey
-  "submission_muchlinski_thornhill" = "#df9b1b",  # orange
-  "submission_final_omm"       = "#8cb63c",  # yellow
-  "unito_transformer"          = "#a22223",  # red
-  "Neg_Bin_GLMM"               = "#a3107c"   # purple
-)
-
-
-model_labels <- c(
-  "zero"                          = "VIEWS Zero",
-  "last"                          = "VIEWS Last Month",
-  "conflictology"                = "VIEWS Conflictology",
-  "conflictforecast_v2"          = "Conflict Forecast",
-  "submission_muchlinski_thornhill" = "MT Hurdle GAM",
-  "submission_final_omm"         = "Observed MM",
-  "unito_transformer"            = "UNITO Transformer",
-  "Neg_Bin_GLMM"                 = "NegBin GLMM",
-  #
-  "tft" = "CCEW tft",
-  "ShapeFinder" = "Shape Finder",
-  "quantile_forecast" = "Quantile Forecast",
-  "boot_240" = "VIEWS Bootstrap",
-  "bodentien_rueter_negbin" = "BR NegBin",
-  "bodentien_rueter_neuralnet" = "BR Neural Net"
-)
-
-theme_setup <- ggplot2::theme(
-  plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-  axis.title = ggplot2::element_text(size = 13),
-  legend.title = ggplot2::element_text(size = 13),
-  axis.text = ggplot2::element_text(size = 12),
-  legend.text = ggplot2::element_text(size = 11)
-)
-
-
-## -----
+## -----------------------------------------------------------------------------
 ## CRPS decomposition
-## -----
+## -----------------------------------------------------------------------------
 
-## Attention: not only for selected models but for all models without excluded ones!!
-
+## ---
+## One model per team: 13 models
+## ---
 crps_month_selected_models <- crps_month
-crps_month_selected_models <- crps_month_selected_models[-which(crps_month_selected_models$Model %in% excluded_models), ]
+
+excluded_secondary_models <- c("submission_final_gpcmm", "submission_final_hpmm", "TW_GLMM",  "Neg_Bin_GLMM")
+
+
+crps_month_selected_models <- crps_month_selected_models[-which(crps_month_selected_models$Model %in% excluded_secondary_models), ]
 
 # Rename models
 crps_month_selected_models$Model <- recode(
@@ -971,23 +628,30 @@ crps_conflict_situation_plot <- ggplot(crps_month_selected_models,
 
 crps_conflict_situation_plot
 
-## ------------------------------------------------------------------------
-## Triptych plots
-## ------------------------------------------------------------------------
 
-## -----
+## -----------------------------------------------------------------------------
 ## murphy diagram
-## -----
-mr_conflict_subset <- murphy(subset(murphy_data, select = c(selected_models,"actual")), 
+## -----------------------------------------------------------------------------
+murphy_data <- prev_peace_prob_month_long_binary_actual %>%
+  select(1:6,8) %>%
+  pivot_wider(names_from = model, values_from = onset_prob_pred) %>%
+  select(5:ncol(.))
+
+
+## ---
+## In-depth: 8 models
+## ---
+mr_conflict_selected <- murphy(subset(murphy_data, select = c(selected_models,"actual")), 
                       y_var = "actual")
 
-df_est_conflict_subset <- estimates(mr_conflict_subset)
-murphy_diagram_selected_models <- ggplot(df_est_conflict_subset) + 
+df_est_conflict_selected <- estimates(mr_conflict_selected)
+
+murphy_diagram_selected_models <- ggplot(df_est_conflict_selected) + 
   geom_path(aes(x = knot, y = mean_score, col = forecast), linewidth = 1, alpha = 0.8) + 
   scale_color_manual(
-    values = model_colors,
-    breaks = names(model_labels),
-    labels = model_labels
+    values = selected_model_colors,
+    breaks = names(selected_model_labels),
+    labels = selected_model_labels
   ) +
   theme_bw() +
   labs(
@@ -1003,42 +667,74 @@ murphy_diagram_selected_models <- ggplot(df_est_conflict_subset) +
 murphy_diagram_selected_models
 
 
-## -----
+## ---
+## Remaining: 9 models
+## ---
+mr_conflict_remaining <- murphy(subset(murphy_data, select = c(remaining_models,"actual")), 
+                               y_var = "actual")
+
+df_est_conflict_remaining <- estimates(mr_conflict_remaining)
+
+murphy_diagram_remaining_models <- ggplot(df_est_conflict_remaining) + 
+  geom_path(aes(x = knot, y = mean_score, col = forecast), linewidth = 1, alpha = 0.8) + 
+  scale_color_manual(
+    values = remaining_model_colors,
+    breaks = names(remaining_model_labels),
+    labels = remaining_model_labels
+  ) +
+  theme_bw() +
+  labs(
+    title = "Murphy Diagram",
+    x = expression(paste("Parameter ", theta)),
+    y = "Mean elementary score",
+    color = ""
+  ) + 
+  theme_setup + 
+  theme(legend.position = "none",#"bottom
+        aspect.ratio = 1)
+
+murphy_diagram_remaining_models
+
+
+## -----------------------------------------------------------------------------
 ## ROC curves
-## -----
+## -----------------------------------------------------------------------------
 
-## -
+## 
 ## https://cran.r-project.org/web/packages/precrec/vignettes/introduction.html
-## -
-
+## 
 roc_data <- prev_peace_prob_month_long_binary_actual
 
+
+## ---
+## In-depth: 8 models
+## ---
 # filter relevant models
-roc_data_filtered <- roc_data %>% 
+roc_data_selected <- roc_data %>% 
   filter(model %in% selected_models)
 
 # create list of scores
-score_list <- lapply(selected_models, function(m) {
-  roc_data_filtered %>%
+score_list_selected <- lapply(selected_models, function(m) {
+  roc_data_selected %>%
     filter(model == m) %>%
     pull(onset_prob_pred)
 })
 
 # create list of labels
-label_list <- lapply(selected_models, function(m) {
-  roc_data_filtered %>%
+label_list_selected <- lapply(selected_models, function(m) {
+  roc_data_selected %>%
     filter(model == m) %>%
     pull(actual)
 })
 
 # join lists
-scores_joined <- join_scores(score_list)
-labels_joined <- join_labels(label_list)
+scores_joined_selected <- join_scores(score_list_selected)
+labels_joined_selected <- join_labels(label_list_selected)
 
 # roc-curve data
 mm_selected_models <- mmdata(
-  scores   = scores_joined,
-  labels   = labels_joined,
+  scores   = scores_joined_selected,
+  labels   = labels_joined_selected,
   modnames = selected_models
 )
 
@@ -1046,9 +742,9 @@ mm_selected_models <- mmdata(
 roc_curve_selected_models <- autoplot(evalmod(mm_selected_models), curvetype = "ROC") + 
   ggplot2::geom_line(size = 1, alpha = 0.8) + 
   ggplot2::scale_color_manual(
-    values = model_colors,
-    breaks = names(model_labels),
-    labels = model_labels
+    values = selected_model_colors,
+    breaks = names(selected_model_labels),
+    labels = selected_model_labels
   ) +
   ggplot2::labs(
     title = "ROC Curve",
@@ -1061,9 +757,61 @@ roc_curve_selected_models <- autoplot(evalmod(mm_selected_models), curvetype = "
 
 roc_curve_selected_models
 
-## -----
+
+## ---
+## Remaining: 9 models
+## ---
+# filter relevant models
+roc_data_remaining <- roc_data %>% 
+  filter(model %in% remaining_models)
+
+# create list of scores
+score_list_remaining <- lapply(remaining_models, function(m) {
+  roc_data_remaining %>%
+    filter(model == m) %>%
+    pull(onset_prob_pred)
+})
+
+# create list of labels
+label_list_remaining <- lapply(remaining_models, function(m) {
+  roc_data_remaining %>%
+    filter(model == m) %>%
+    pull(actual)
+})
+
+# join lists
+scores_joined_remaining <- join_scores(score_list_remaining)
+labels_joined_remaining <- join_labels(label_list_remaining)
+
+# roc-curve data
+mm_remaining_models <- mmdata(
+  scores   = scores_joined_remaining,
+  labels   = labels_joined_remaining,
+  modnames = remaining_models
+)
+
+
+roc_curve_remaining_models <- autoplot(evalmod(mm_remaining_models), curvetype = "ROC") + 
+  ggplot2::geom_line(size = 1, alpha = 0.8) + 
+  ggplot2::scale_color_manual(
+    values = remaining_model_colors,
+    breaks = names(remaining_model_labels),
+    labels = remaining_model_labels
+  ) +
+  ggplot2::labs(
+    title = "ROC Curve",
+    x = "FAR",
+    y = "HR",
+    color = ""
+  ) +
+  theme_setup +
+  ggplot2::theme(legend.position = "none") #"bottom
+
+roc_curve_remaining_models
+
+## -----------------------------------------------------------------------------
 ## Reliability diagram
-## -----
+## -----------------------------------------------------------------------------
 
 ## function to create custom reliability diagram
 create_reliability_diag <- function(data, forecast_model) {
@@ -1072,6 +820,25 @@ create_reliability_diag <- function(data, forecast_model) {
     filter(model == forecast_model)
   
   r_selected <- reliabilitydiag(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual)
+  
+  
+  
+  # strip the geomSegment out (red and overwritten)
+  reliability_plot <- autoplot(r_selected)
+  
+  # is_seg <- sapply(reliability_plot$layers, function(layer) {
+  #   inherits(layer$geom, "GeomSegment")
+  # })
+  # print(is_seg[5])
+  
+  is_seg <- c(FALSE, FALSE, FALSE, FALSE, TRUE)
+  
+  # 4) strip them out
+  reliability_plot$layers <- reliability_plot$layers[!is_seg]
+  
+  
+  
+  
   
   data_estim <- estimates(reliability(x = reliability_data_selected$onset_prob_pred, y = reliability_data_selected$actual))
   
@@ -1118,13 +885,13 @@ create_reliability_diag <- function(data, forecast_model) {
       data = data_estim,
       colour = path_color,
       shape = 19,
-      size = 3 #3
+      size = 2 #3
     )
   }
   
   
   
-  p <- autoplot(r_selected) + ggplot2::labs(
+  p <- reliability_plot + ggplot2::labs( #autoplot(r_selected) + ggplot2::labs(
     title = model_labels[model_name],
     x = "Forecast value",
     y = "CEP") +
@@ -1139,7 +906,7 @@ create_reliability_diag <- function(data, forecast_model) {
         xend = .data$x_end, 
         yend = .data$CEP_end),
       data = df_segments,
-      linewidth = 1.8, #1.8
+      linewidth = 1.4, #1.8
       colour = path_color
     ) +
     ggplot2::geom_path(
@@ -1157,38 +924,43 @@ create_reliability_diag <- function(data, forecast_model) {
 }
 
 
+
+
+## ---
+## In-depth: 8 models
+## ---
 # list to store the CORP
-corp_plots_list <- list()
+corp_plots_list_selected <- list()
 
 for (model_name in selected_models) {
   
   plot <- create_reliability_diag(prev_peace_prob_month_long_binary_actual, model_name)
   
-  corp_plots_list[[model_name]] <- list(plot = plot)
+  corp_plots_list_selected[[model_name]] <- list(plot = plot)
   
 }
 
 # modify plot list
-corp_plots_grid_modified_list <- corp_plots_list
+corp_plots_grid_modified_list_selected <- corp_plots_list_selected
 
-corp_plot_model_names <- names(corp_plots_grid_modified_list)
+corp_plot_model_names_selected <- names(corp_plots_grid_modified_list_selected)
 
 
-for(i in seq_along(corp_plots_list)){
+for(i in seq_along(corp_plots_list_selected)){
   
-  model <- corp_plot_model_names[i]
+  model <- corp_plot_model_names_selected[i]
   
   p <- NULL
   
   if(i == 1){
-    p <- corp_plots_grid_modified_list[[model]]$plot + 
+    p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
                      plot.margin = unit(c(0,0,0,0), "cm"))
   } else if(i > 1 && i < 5){
-    p <- corp_plots_grid_modified_list[[model]]$plot + 
+    p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.text.y = element_blank(),
                      axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
@@ -1197,12 +969,12 @@ for(i in seq_along(corp_plots_list)){
                      axis.title.y = element_blank(),
                      plot.margin = unit(c(0,0,0,0), "cm"))
   } else if(i == 5){
-    p <- corp_plots_grid_modified_list[[model]]$plot + 
+    p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
                      plot.margin = unit(c(0,0,0,0), "cm"))
   } else {
-    p <- corp_plots_grid_modified_list[[model]]$plot + 
+    p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.text.y = element_blank(),
                      axis.ticks.y = element_blank(),
                      axis.title.x = element_blank(),
@@ -1211,14 +983,14 @@ for(i in seq_along(corp_plots_list)){
   }
   
   
-  corp_plots_grid_modified_list[[model]]$plot <- p
+  corp_plots_grid_modified_list_selected[[model]]$plot <- p
   
 }
 
-plots_corp_gird_modified <- lapply(corp_plots_grid_modified_list, function(x) x$plot)
+plots_corp_gird_modified_selected <- lapply(corp_plots_grid_modified_list_selected, function(x) x$plot)
 
 # Kombiniere in einem 2x4 Layout
-p_all <- plot_grid(plotlist = plots_corp_gird_modified, nrow = 2, ncol = 4, align = "hv", scale = 0.99)
+p_all_selected <- plot_grid(plotlist = plots_corp_gird_modified_selected, nrow = 2, ncol = 4, align = "hv", scale = 0.99)
 
 #create common x and y labels
 y.grob <- textGrob("CEP", 
@@ -1228,14 +1000,89 @@ x.grob <- textGrob("Forecast value",
                    gp=gpar(col="black", fontsize=15))
 
 #add to plot
-reliability_diag_selected_models_plot <- grid.arrange(arrangeGrob(p_all, left = y.grob, bottom = x.grob))
-reliability_diag_selected_models_plot
+reliability_diag_selected_models_plot <- grid.arrange(arrangeGrob(p_all_selected, left = y.grob, bottom = x.grob))
+
+## ---
+## Remaining: 9 models
+## ---
+# list to store the CORP
+corp_plots_list_remaining <- list()
+
+for (model_name in remaining_models) {
+  
+  plot <- create_reliability_diag(prev_peace_prob_month_long_binary_actual, model_name)
+  
+  corp_plots_list_remaining[[model_name]] <- list(plot = plot)
+  
+}
+
+# modify plot list
+corp_plots_grid_modified_list_remaining <- corp_plots_list_remaining
+
+corp_plot_model_names_remaining <- names(corp_plots_grid_modified_list_remaining)
+
+
+for(i in seq_along(corp_plots_list_remaining)){
+  
+  model <- corp_plot_model_names_remaining[i]
+  
+  p <- NULL
+  
+  if(i == 1 || i == 4){
+    p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if((i > 1 && i < 4) || (i > 4 && i < 7)){
+    p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.text.y = element_blank(),
+                     axis.text.x = element_blank(),
+                     axis.ticks.x = element_blank(),
+                     axis.ticks.y = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else if(i == 7){
+    p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  } else {
+    p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
+      ggplot2::theme(axis.text.y = element_blank(),
+                     axis.ticks.y = element_blank(),
+                     axis.title.x = element_blank(),
+                     axis.title.y = element_blank(),
+                     plot.margin = unit(c(0,0,0,0), "cm"))
+  }
+  
+  
+  corp_plots_grid_modified_list_remaining[[model]]$plot <- p
+  
+}
+
+plots_corp_gird_modified_remaining <- lapply(corp_plots_grid_modified_list_remaining, function(x) x$plot)
+
+# Kombiniere in einem 2x4 Layout
+p_all_remaining <- plot_grid(plotlist = plots_corp_gird_modified_remaining, nrow = 3, ncol = 3, align = "hv", scale = 0.99)
+
+#create common x and y labels
+y_remaining.grob <- textGrob("CEP", 
+                   gp=gpar(col="black", fontsize=15), rot=90)
+
+x_remaining.grob <- textGrob("Forecast value", 
+                   gp=gpar(col="black", fontsize=15))
+
+#add to plot
+reliability_diag_remaining_models_plot <- grid.arrange(arrangeGrob(p_all_remaining, left = y_remaining.grob, bottom = x_remaining.grob))
 
 
 
-## -----
-## combine Murpy Diagram and ROC curve
-## -----
+## -----------------------------------------------------------------------------
+## Merge Murpy Diagram and ROC curve
+## -----------------------------------------------------------------------------
 # method get legend in cowplot not longer working so method to get legend from
 # https://stackoverflow.com/questions/78163631/r-get-legend-from-cowplot-package-no-longer-work-for-ggplot2-version-3-5-0
 get_legend2 <- function(plot, legend = NULL) {
@@ -1265,6 +1112,11 @@ get_legend2 <- function(plot, legend = NULL) {
   return(NULL)
 }
 
+
+## ---
+## In-depth: 8 models
+## ---
+
 # get legend from roc_curve_plot
 ## ACHTUNG aktuell bei roc curv keine legend vorhanden!!!
 #legend_roc <- get_legend2(roc_curve_selected_models + theme(legend.position="bottom"))
@@ -1276,62 +1128,57 @@ murphy_roc_selected_models_plot <- plot_grid(murphy_diagram_selected_models + th
                   align = 'vh',
                   hjust = -1,
                   nrow = 1,
-                  rel_widths = c(1, -0.1, 1)
+                  rel_widths = c(1, 0, 1)
 )
-
-
-# add the legend underneath the row, 10% of the height of one plot
-#murphy_roc_selected_models_plot_legend <- plot_grid(murphy_roc_selected_models_plot, legend_roc, ncol = 1, rel_heights = c(1, .2))
-
 murphy_roc_selected_models_plot
 
 
+## ---
+## Remaining: 9 models
+## ---
+# arrange the three plots in a single row
+murphy_roc_remaining_models_plot <- plot_grid(murphy_diagram_remaining_models + theme(legend.position="none"),
+                                             NULL,
+                                             roc_curve_remaining_models + theme(legend.position="none"),
+                                             align = 'vh',
+                                             hjust = -1,
+                                             nrow = 1,
+                                             rel_widths = c(1, 0, 1)
+)
+murphy_roc_remaining_models_plot
 
+## -----------------------------------------------------------------------------
+## Merge Murpy Diagram, ROC curve and Reliability Diagram
+## -----------------------------------------------------------------------------
 
-## -----
-## combine Murpy Diagram, ROC curve and Reliability Diagram
-## -----
-new_triptych <- grid.arrange(
+## ---
+## In-depth: 8 models
+## ---
+
+new_triptych_selected <- grid.arrange(
   murphy_roc_selected_models_plot,
   reliability_diag_selected_models_plot,
   nrow = 2,
-  heights = c(1, 1.1)
+  heights = c(1, 1.55)
 )
 
-new_triptych
 
+## ---
+## Remaining: 9 models
+## ---
 
+new_triptych_remaining <- grid.arrange(
+  murphy_roc_remaining_models_plot,
+  reliability_diag_remaining_models_plot,
+  nrow = 2,
+  heights = c(1, 1.65)
+)
 
-# width = 800, height = 800
+# ggsave("plots_tobi/tryptich_remaining_models.png", 
+#        plot = new_triptych_remaining, width = 600, height = 925, dpi = 90, units = "px")
 
-
-# # Schritt 1: erstelle top und bottom plotgrids
-# top_row <- plot_grid(
-#   murphy_diagram_selected_models,
-#   roc_curve_selected_models,
-#   ncol = 2,
-#   align = "h"
-# )
-# 
-# bottom_grid <- plot_grid(plotlist = plots_corp_gird_modified, 
-#           nrow = 2, 
-#           ncol = 4, 
-#           align = "hv", 
-#           scale = 1)
-# 
-# # Schritt 2: kombiniere Top + Bottom ohne Beschriftung
-# combined <- plot_grid(
-#   top_row,
-#   bottom_grid,
-#   ncol = 1,
-#   rel_heights = c(1, 1.5),
-#   rel_widths = c(2,1)
-# )
-# 
-# # Schritt 3: packe in ggdraw() und füge Achsentitel hinzu
-# final_plot <- ggdraw(combined) +
-#   draw_label("Forecast value", x = 0.5, y = 0, vjust = -0.5, size = 12) +  # x-Achse unten
-#   draw_label("CEP", x = 0, y = 0.5, angle = 90, vjust = 1.5, size = 12)    # y-Achse links
+ggsave("plots_tobi/tryptich_remaining_models.png",
+       plot = new_triptych_remaining, width = 1.4 * 1875, height = 1.4 * 2890.6, dpi = 300, units = "px")
 
 
 
@@ -1346,19 +1193,9 @@ new_triptych
 
 
 
-
-
-
-
-
-
-
-
-
-
-## -----
-## MSC-DSC-plots
-## -----
+## -----------------------------------------------------------------------------
+## BRIER: MSC-DSC-plots
+## -----------------------------------------------------------------------------
 
 brier_decomposition_results <- map2(
   .x = models_scoring_rules,
@@ -1376,6 +1213,9 @@ brier_decomposition_results <- map2(
   }
 )
 
+## ---
+## In-depth: 8 models
+## ---
 # filter for selected models
 brier_decomposition_results <- brier_decomposition_results[selected_models]
 
@@ -1508,3 +1348,22 @@ brier_score_decomposition <- ggplot(brier_score_decomposition_barplot, aes(x = c
 
 brier_score_decomposition
 
+## ---
+## All models
+## ---
+
+
+## -----------------------------------------------------------------------------
+## LOG: MSC-DSC-plots
+## -----------------------------------------------------------------------------
+
+## ---
+## In-depth: 8 models
+## ---
+
+
+
+
+## ---
+## All models
+## ---
