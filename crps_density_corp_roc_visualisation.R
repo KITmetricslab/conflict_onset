@@ -102,17 +102,31 @@ names(predictive_samples) <- model_names
 
 
 
+# set country ids and observations etc
+country_ids <- unique(observations_18_23$country_id)
+actuals_ids <- 457:528 # month_ids for 01-2018, 02-2018, ..., 12-2023
+cm_pairs <- cbind(rep(country_ids, each = length(actuals_ids)),
+                  rep(actuals_ids, length(country_ids)))
+
+date_seq <- seq(
+  from = as.Date("2018-01-01"),
+  to   = as.Date("2023-12-01"),
+  by   = "month"
+)
+
+# format as "MM-YYYY"
+month_labels <- format(date_seq, "%m-%Y")
+
+# Named character vector: names are month_ids
+month_lookup_vec <- setNames(month_labels, actuals_ids)
+
+
 ### CRPS -BRIER - LOG Score Calculation -------------------------------------------------------------------------
 
 ## -----
 # compute crps on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
 ## -----
 
-country_ids <- unique(observations_18_23$country_id)
-actuals_ids <- 457:528 # month_ids for 01-2018, 02-2018, ..., 12-2023
-cm_pairs <- cbind(rep(country_ids, each = length(actuals_ids)),
-                  rep(actuals_ids, length(country_ids)))
- 
 models_crps <- list()
 
 
@@ -510,33 +524,59 @@ fatalities_worldwide_plot_data <- fatalities_worldwide_plot_data %>%
     )
   )
 
-# 5. Gestapeltes Säulendiagramm zeichnen 
-ggplot(fatalities_worldwide_plot_data, aes(fill=country_category, y=n_fatalities, x=month_id)) + 
+
+fatalities_months <- sort(unique(fatalities_worldwide_plot_data$month_id))
+
+# to determin maximum y range
+fatalities_worldwide_y_range <- fatalities_worldwide_plot_data %>%
+  group_by(month_id) %>%
+  summarise(
+    total_fatalities = sum(n_fatalities)
+  )
+#max(fatalities_worldwide_y_range$total_fatalities)
+
+
+fatalities_worldwide_plot <- ggplot(fatalities_worldwide_plot_data, aes(fill=country_category, y=n_fatalities, x=month_id)) + 
   geom_bar(position="stack", stat="identity") +
   scale_fill_manual(
-    values = c("Ukraine" = "darkgreen", "Yemen" = "darkgreen",
-               "Afghanistan"="darkgreen","Syria" = "white",
-               "Ethiopia" = "#808080", "others" = "#D9D9D9")
+    values = c("Ukraine" = "#E69F00", "Yemen" = "#0072B2",
+               "Afghanistan"="#D55E00","Syria" = "#51103C",
+               "Ethiopia" = "grey30", "others" = "#009E73")
   ) +
-  labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
+  labs(title = "Aggregated Fatalities for Top 5 Countries and All Others",
+       x = "Month") + 
+  scale_y_continuous(
+    "Fatalities",
+    breaks = seq(0, 150000, length.out = 6),
+    labels = function(x) {
+      # format() fügt Tausender‐Punkte und Komma‐Dezimal an
+      format(x,
+             big.mark    = ".",
+             decimal.mark= ",",
+             scientific  = FALSE,
+             trim        = TRUE)
+    }
+  ) + 
+  scale_x_continuous(
+    breaks = seq(min(fatalities_months), max(fatalities_months), by = 6),
+    labels = month_lookup_vec[as.character(seq(min(fatalities_months), max(fatalities_months), by = 6))]
+  ) +
   theme_minimal() +
   theme(
     panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
-    axis.text.y = element_blank(),
-    axis.ticks.length.y = unit(0, "points"),
-    axis.ticks.x = element_blank(),
-    axis.title = element_blank(),
-    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
-    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-    legend.title = ggplot2::element_text(size = 15),
-    legend.text = ggplot2::element_text(size = 14),
-    axis.line.x = element_blank(),
-    axis.line.y = element_blank(),
-    axis.text.x = ggplot2::element_text(size = 14)
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.title = element_text(size = 16, hjust = 0.5),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.text = element_text(size = 9),
+    axis.title = element_text(size = 13),
+    axis.ticks       = element_line(color = "black")
   )
 
-
-
+ggsave("final_plots/fatalities_worldwide.png",
+       plot = fatalities_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+       bg="white")
 
 
 ## -----------------------------------------------------------------------------
@@ -550,18 +590,33 @@ greater_zero_fatalities_plot_data <- observations_18_23 %>%
     .groups     = "drop"
   )
 
-ggplot(greater_zero_fatalities_plot_data, aes(y = n_countries, x = month_id)) +
-  geom_bar(position="stack", stat="identity") +
-  labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
+greater_zero_fatalities_plot <- ggplot(greater_zero_fatalities_plot_data, aes(y = n_countries, x = month_id)) +
+  geom_bar(position="stack", stat="identity",fill  = "orange3", alpha = 0.7, width = 0.7, color = "black") +
+  labs(title = "Countries Experiencing Conflict Fatalities by Month",
+       x = "Month") + 
+  scale_x_continuous(
+    breaks = seq(min(fatalities_months), max(fatalities_months), by = 6),
+    labels = month_lookup_vec[as.character(seq(min(fatalities_months), max(fatalities_months), by = 6))]
+  ) +
+  scale_y_continuous(
+    "Countries"
+  ) +
   theme_minimal() +
   theme(
     panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
-    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-    legend.title = ggplot2::element_text(size = 15),
-    legend.text = ggplot2::element_text(size = 14),
-    axis.text.x = ggplot2::element_text(size = 14)
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.title = element_text(size = 16, hjust = 0.5),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.text = element_text(size = 9),
+    axis.title = element_text(size = 13),
+    axis.ticks       = element_line(color = "black")
   )
 
+ggsave("final_plots/greater_zero_fatalities.png",
+       plot = greater_zero_fatalities_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+       bg="white")
 
 ## -----------------------------------------------------------------------------
 ## Number of Onset events per month for the test window
@@ -577,35 +632,523 @@ onsets_per_month_plot_data <- conflict_situations %>%
   )
 
 
-ggplot(onsets_per_month_plot_data, aes(y = n_onset, x = month_id)) + 
-  geom_bar(position="stack", stat="identity") +
-  labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
+onsets_per_month_plot <- ggplot(onsets_per_month_plot_data, aes(y = n_onset, x = month_id)) + 
+  geom_bar(position="stack", stat="identity",fill  = "orange3", alpha = 0.7, width = 0.7, color = "black") +
+  labs(title = "Onset Events by Month for all Countries",
+       x = "Month") + 
+  scale_x_continuous(
+    breaks = seq(min(fatalities_months), max(fatalities_months), by = 6),
+    labels = month_lookup_vec[as.character(seq(min(fatalities_months), max(fatalities_months), by = 6))]
+  ) +
+  scale_y_continuous(
+    "Onset Events",
+    breaks = seq(0,10, by = 2)
+  ) +
   theme_minimal() +
   theme(
     panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
-    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-    legend.title = ggplot2::element_text(size = 15),
-    legend.text = ggplot2::element_text(size = 14),
-    axis.text.x = ggplot2::element_text(size = 14)
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.title = element_text(size = 16, hjust = 0.5),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.text = element_text(size = 9),
+    axis.title = element_text(size = 13),
+    axis.ticks       = element_line(color = "black")
   )
 
-## -----------------------------------------------------------------------------
-## Maybe: CRPS per Country: highlighting 5-10 most important ones (und other) 18 - 23
-## -----------------------------------------------------------------------------
-
-
-
-
-
+ggsave("final_plots/onsets_per_month.png",
+       plot = onsets_per_month_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+       bg="white")
 
 ## -----------------------------------------------------------------------------
-## Maybe: Selected Onset Events
+## Maybe: CRPS per Country: highlighting 5-10 most important ones (and other) 18 - 23
 ## -----------------------------------------------------------------------------
 
+average_CRPSscores_over_all_models_18_23 <- prob_models_all_situation_long %>%
+  select(
+    month_id,
+    country_id,
+    crps
+  ) %>%
+  group_by(
+    month_id,
+    country_id
+  ) %>%
+  summarise(
+    mean_crps = mean(crps, na.rm = TRUE),
+    .groups   = "drop"
+  )
+
+
+# 3. Top-Länder bestimmen 
+top_country_crps <- average_CRPSscores_over_all_models_18_23 %>%
+  group_by(country_id) %>%
+  summarise(
+    total_crps = sum(mean_crps, na.rm = TRUE),
+    .groups          = "drop"
+  ) %>%
+  slice_max(total_crps, n = 5) 
+
+top_countries_crps <- top_country_crps %>%
+  pull(country_id)
+
+
+crps_worldwide_plot_data <- average_CRPSscores_over_all_models_18_23 %>%
+  mutate(
+    # if_else liefert immer einen Vektor gleicher Länge
+    country_category = if_else(
+      country_id %in% top_countries_crps,
+      # TRUE-Zweig: ID als Zeichenkette, damit "others" passt
+      as.character(country_id),
+      # FALSE-Zweig
+      "others"
+    )
+  ) %>%
+  group_by(month_id, country_category) %>%
+  summarise(
+    sum_avg_crps = sum(mean_crps, na.rm = TRUE),
+    .groups      = "drop"
+  )
+
+# change country_id's to names
+crps_worldwide_plot_data <- crps_worldwide_plot_data %>%
+  mutate(
+    country_category = if_else(
+      country_category == "others",
+      "others",
+      # match liefert für jede ID die Position in country_id_list
+      country_id_list$name[
+        match(
+          as.character(country_category),
+          as.character(country_id_list$country_id)
+        )
+      ]
+    )
+  )
+
+crps_months <- sort(unique(crps_worldwide_plot_data$month_id))
+
+# to determin maximum y range
+crps_worldwide_y_range <- crps_worldwide_plot_data %>%
+  group_by(month_id) %>%
+  summarise(
+    avg_crps = sum(sum_avg_crps)
+  )
+# max(crps_worldwide_y_range$avg_crps)
+
+
+crps_worldwide_plot <- ggplot(crps_worldwide_plot_data, aes(fill=country_category, y=sum_avg_crps, x=month_id)) + 
+  geom_bar(position="stack", stat="identity") +
+  scale_fill_manual(
+    values = c("Ukraine" = "#E69F00", "Yemen" = "#0072B2",
+               "Afghanistan"="#D55E00","Israel" = "#51103C",
+               "Ethiopia" = "grey30", "others" = "#009E73")
+  ) +
+  labs(title = "Mean CRPS Across Models for Top 5 Countries and All Others",
+       x = "Month") + 
+  scale_y_continuous(
+    "Mean CRPS",
+    breaks = seq(0, 150000, length.out = 6),
+    labels = function(x) {
+      # format() fügt Tausender‐Punkte und Komma‐Dezimal an
+      format(x,
+             big.mark    = ".",
+             decimal.mark= ",",
+             scientific  = FALSE,
+             trim        = TRUE)
+    }
+  ) + 
+  scale_x_continuous(
+    breaks = seq(min(crps_months), max(crps_months), by = 6),
+    labels = month_lookup_vec[as.character(seq(min(crps_months), max(crps_months), by = 6))]
+  ) +
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.title = element_text(size = 16, hjust = 0.5),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.text = element_text(size = 9),
+    axis.title = element_text(size = 13),
+    axis.ticks       = element_line(color = "black")
+  )
+
+ggsave("final_plots/crps_worldwide.png",
+       plot = crps_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+       bg="white")
+
+
+## -----------------------------------------------------------------------------
+## Maybe: BRIER for onset cases (previous peace) per Country: 
+## highlighting 5-10 most important ones (and other) 18 - 23
+## -----------------------------------------------------------------------------
+average_BRIERscores_over_all_models_18_23 <- prev_peace_prob_month_long %>%
+  select(
+    month_id,
+    country_id,
+    brier_onset
+  ) %>%
+  group_by(
+    month_id,
+    country_id
+  ) %>%
+  summarise(
+    mean_brier = mean(brier_onset, na.rm = TRUE),
+    .groups   = "drop"
+  )
+
+
+# 3. Top-Länder bestimmen 
+top_country_brier <- average_BRIERscores_over_all_models_18_23 %>%
+  group_by(country_id) %>%
+  summarise(
+    total_brier = sum(mean_brier, na.rm = TRUE),
+    .groups          = "drop"
+  ) %>%
+  slice_max(total_brier, n = 5) 
+
+top_countries_brier <- top_country_brier %>%
+  pull(country_id)
+
+
+brier_worldwide_plot_data <- average_BRIERscores_over_all_models_18_23 %>%
+  mutate(
+    # if_else liefert immer einen Vektor gleicher Länge
+    country_category = if_else(
+      country_id %in% top_countries_brier,
+      # TRUE-Zweig: ID als Zeichenkette, damit "others" passt
+      as.character(country_id),
+      # FALSE-Zweig
+      "others"
+    )
+  ) %>%
+  group_by(month_id, country_category) %>%
+  summarise(
+    sum_avg_brier = sum(mean_brier, na.rm = TRUE),
+    .groups      = "drop"
+  )
+
+# change country_id's to names
+brier_worldwide_plot_data <- brier_worldwide_plot_data %>%
+  mutate(
+    country_category = if_else(
+      country_category == "others",
+      "others",
+      # match liefert für jede ID die Position in country_id_list
+      country_id_list$name[
+        match(
+          as.character(country_category),
+          as.character(country_id_list$country_id)
+        )
+      ]
+    )
+  )
+
+brier_months <- sort(unique(brier_worldwide_plot_data$month_id))
+
+
+brier_worldwide_plot <- ggplot(brier_worldwide_plot_data, aes(fill=country_category, y=sum_avg_brier, x=month_id)) + 
+  geom_bar(position="stack", stat="identity") +
+  scale_fill_manual(
+    values = c("Libya" = "#E69F00", "Bangladesh" = "#0072B2",
+               "Burundi"="#D55E00","Peru" = "#51103C",
+               "Rwanda" = "grey30", "others" = "#009E73")
+  ) +
+  labs(title = "Mean BRIER-Score (Onset) Across Models for Top 5 Countries and All Others",
+       x = "Month") + 
+  scale_y_continuous(
+    "Mean BRIER Score",
+    labels = function(x) {
+      # format() fügt Tausender‐Punkte und Komma‐Dezimal an
+      format(x,
+             big.mark    = ".",
+             decimal.mark= ",",
+             scientific  = FALSE,
+             trim        = TRUE)
+    }
+  ) + 
+  scale_x_continuous(
+    breaks = seq(min(brier_months), max(brier_months), by = 6),
+    labels = month_lookup_vec[as.character(seq(min(brier_months), max(brier_months), by = 6))]
+  ) +
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    plot.title = element_text(size = 16, hjust = 0.5),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12),
+    axis.text = element_text(size = 9),
+    axis.title = element_text(size = 13),
+    axis.ticks       = element_line(color = "black")
+  )
+
+ggsave("final_plots/brier_worldwide.png",
+       plot = brier_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+       bg="white")
+
+
+## -----------------------------------------------------------------------------
+## Selected Onset Events
+## -----------------------------------------------------------------------------
+
+onset_event_plot <- function(data, selected_model_bool, country){
+  
+  onset_bars <- data %>%
+    filter(situation_month == "onset") %>%
+    select(month_id, actual) %>%
+    distinct()
+  
+  max_onset <- max(onset_bars$actual)
+  
+  months <- sort(unique(data$month_id))
+  
+  if(selected_model_bool == TRUE){
+    scale_color_own <- scale_color_manual(
+      values = selected_model_colors,
+      breaks = names(selected_model_labels),
+      labels = selected_model_labels
+    )
+  } else{
+    scale_color_own <- scale_color_manual(
+      values = remaining_model_colors,
+      breaks = names(remaining_model_labels),
+      labels = remaining_model_labels
+    )
+    
+  }
+  
+  title_string <- paste0("Estimated Onset Probabilities – ", country, " (Subset)")
+  
+  p <- ggplot(data, 
+              aes(x = month_id, y = onset_prob_pred, 
+                  group = model, color = model)) +
+    geom_line(size = 0.7, alpha = 0.5) +
+    geom_point(size = 2,    # Punktgröße
+               shape = 21,  # gefüllter Kreis
+               fill = "white",
+               stroke = 0.8) + 
+    geom_col(
+      data       = onset_bars,
+      inherit.aes = FALSE,
+      aes(
+        x = month_id,
+        y = actual / max_onset
+      ),
+      fill  = "grey40",
+      width = 0.2,
+      alpha = 0.9,
+      linewidth = 0.6
+    ) +
+    labs(title = title_string,
+         x = "Month") + 
+    theme_minimal() +
+    scale_y_continuous(
+      "Predicted Onset Probability", 
+      sec.axis = sec_axis(~ . * max_onset, name = "Onset Magnitude")
+    ) +
+    scale_x_continuous(
+      breaks = seq(min(months), max(months), by = 1),
+      labels = month_lookup_vec[as.character(months)],
+      expand = expansion(add = c(0.3, 0.3))
+    ) +
+    scale_color_own +
+    theme(
+      panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      plot.title = element_text(size = 16, hjust = 0.5),
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      axis.text = element_text(size = 9),
+      axis.title = element_text(size = 13),
+      axis.ticks       = element_line(color = "black"),
+      axis.line.y.right = element_line(color = "grey40"),
+      axis.ticks.y.right = element_line(color = "grey40"),
+      axis.text.y.right = element_text(color = "grey40"), 
+      axis.title.y.right = element_text(color = "grey40")
+    )
+  return(p)
+  
+}
 
 
 
 
+
+## ---
+## In-depth: 8 models
+## ---
+
+##### onsets per year > 1
+# data_onset_events_month_notyear <- prev_peace_prob_month_long %>%
+#   filter(situation_month == "onset" &
+#            situation_year == "conflict")
+
+## Multiple Small Onsets in a short period of time
+# CAR: country 70 
+# ab onset monat 467 bis 477 interessant 
+# hat in test periode immer wieder ausbrüche von sehr 
+# niedriger höhe ~2 und einen höheren 46
+CAR_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+  filter(country_id == 70 & 
+           month_id >= 466 &
+           month_id <= 477 &
+           model %in% selected_models)
+
+
+car_onset_plot_selected <- onset_event_plot(CAR_onset_predictions_dataset_selected, TRUE, "Central African Republic")
+
+ggsave("final_plots/car_onset_selected.png",
+       plot = car_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+       bg="white")
+
+
+## highest number of fatalities of any onset event
+# Ethopia: country 57 
+# onset month 491 mit max überhaupt von 1474 aber 
+# auch onset month 485 mit 16 fatalities 
+# (modelle täuschen sich stark: großer CRPS)
+Ethiopia_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+  filter(country_id == 57 & 
+           month_id >= 481 &
+           month_id <= 492 &
+           model %in% selected_models)
+
+
+ethiopia_onset_plot_selected <- onset_event_plot(Ethiopia_onset_predictions_dataset_selected, TRUE, "Ethiopia")
+
+ggsave("final_plots/ethiopia_onset_selected.png",
+       plot = ethiopia_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+       bg="white")
+
+
+##### onsets per year = 1
+# data_onset_events_year <- prev_peace_prob_month_long %>%
+#   filter(situation_month == "onset" &
+#            situation_year == "onset")
+
+## Israel: country 218 
+# in month 497 maximum aus onset onset mit 252
+Israel_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+  filter(country_id == 218 & 
+           month_id >= 486 &
+           month_id <= 497 &
+           model %in% selected_models)
+
+
+israel_onset_plot_selected <- onset_event_plot(Israel_onset_predictions_dataset_selected, TRUE, "Israel")
+
+ggsave("final_plots/israel_onset_selected.png",
+       plot = israel_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+       bg="white")
+
+##### onsets per year = 0
+#Poland 101
+# month 457 - 468
+Poland_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+  filter(country_id == 101 & 
+           month_id >= 517 &
+           month_id <= 528 &
+           model %in% selected_models)
+
+
+poland_onset_plot_selected <- onset_event_plot(Poland_onset_predictions_dataset_selected, TRUE, "Poland")
+
+ggsave("final_plots/poland_onset_selected.png",
+       plot = poland_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+       bg="white")
+
+
+
+
+## ---
+## Remaining: 9 models
+## ---
+
+##### onsets per year > 1
+# data_onset_events_month_notyear <- prev_peace_prob_month_long %>%
+#   filter(situation_month == "onset" &
+#            situation_year == "conflict")
+
+## Multiple Small Onsets in a short period of time
+# CAR: country 70 
+# ab onset monat 467 bis 477 interessant 
+# hat in test periode immer wieder ausbrüche von sehr 
+# niedriger höhe ~2 und einen höheren 46
+CAR_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+  filter(country_id == 70 & 
+           month_id >= 466 &
+           month_id <= 477 &
+           model %in% remaining_models)
+
+
+car_onset_plot_remaining <- onset_event_plot(CAR_onset_predictions_dataset_remaining, FALSE, "Central African Republic")
+
+ggsave("final_plots/car_onset_remaining.png",
+       plot = car_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+       bg="white")
+
+
+## highest number of fatalities of any onset event
+# Ethopia: country 57 
+# onset month 491 mit max überhaupt von 1474 aber 
+# auch onset month 485 mit 16 fatalities 
+# (modelle täuschen sich stark: großer CRPS)
+Ethiopia_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+  filter(country_id == 57 & 
+           month_id >= 481 &
+           month_id <= 492 &
+           model %in% remaining_models)
+
+
+ethiopia_onset_plot_remaining <- onset_event_plot(Ethiopia_onset_predictions_dataset_remaining, FALSE, "Ethiopia")
+
+ggsave("final_plots/ethiopia_onset_remaining.png",
+       plot = ethiopia_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+       bg="white")
+
+
+##### onsets per year = 1
+# data_onset_events_year <- prev_peace_prob_month_long %>%
+#   filter(situation_month == "onset" &
+#            situation_year == "onset")
+
+## Israel: country 218 
+# in month 497 maximum aus onset onset mit 252
+Israel_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+  filter(country_id == 218 & 
+           month_id >= 486 &
+           month_id <= 497 &
+           model %in% remaining_models)
+
+
+israel_onset_plot_remaining <- onset_event_plot(Israel_onset_predictions_dataset_remaining, FALSE, "Israel")
+
+ggsave("final_plots/israel_onset_remaining.png",
+       plot = israel_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+       bg="white")
+
+##### onsets per year = 0
+#Poland 101
+# month 457 - 468
+Poland_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+  filter(country_id == 101 & 
+           month_id >= 517 &
+           month_id <= 528 &
+           model %in% remaining_models)
+
+
+poland_onset_plot_remaining <- onset_event_plot(Poland_onset_predictions_dataset_remaining, FALSE, "Poland")
+
+
+ggsave("final_plots/poland_onset_remaining.png",
+       plot = poland_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+       bg="white")
 
 
 ## -----------------------------------------------------------------------------
