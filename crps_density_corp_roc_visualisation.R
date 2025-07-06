@@ -58,6 +58,15 @@ files_actuals_from18 <- list.files(data_path, pattern = "cm_actuals_\\d{4}\\.par
 # read all files and bind them into a single data frame
 observations_18_23 <- do.call(rbind, lapply(files_actuals_from18, arrow::read_parquet)) # observations from 2018 - 2023
 
+country_id_list <- read_csv(
+  "country_list.csv",
+  col_types = cols(
+    country_id = col_integer(),
+    id         = col_integer(),
+    name       = col_character()
+  )
+)
+
 ## -----
 # load predictive samples from benchmark models and submitted forecasts
 ## -----
@@ -415,9 +424,9 @@ selected_model_colors <- setNames(selected_colors, selected_models)
 
 selected_model_labels <- model_labels[selected_models]
 
-## -----
+## ---
 ## Remaining models
-## -----
+## ---
 
 remaining_models <- setdiff(model_names, selected_models)
 
@@ -455,6 +464,77 @@ theme_setup <- ggplot2::theme(
 ## Number of total fatalities worldwide per month, stacked bar plot
 ## -----------------------------------------------------------------------------
 
+# 3. Top-Länder bestimmen 
+top_country_fatalities <- observations_18_23 %>%
+  group_by(country_id) %>%
+  summarise(
+    total_fatalities = sum(outcome, na.rm = TRUE),
+    .groups          = "drop"
+  ) %>%
+  slice_max(total_fatalities, n = 5) 
+
+top_countries <- top_country_fatalities %>%
+  pull(country_id)
+
+
+fatalities_worldwide_plot_data <- observations_18_23 %>%
+  mutate(
+    # if_else liefert immer einen Vektor gleicher Länge
+    country_category = if_else(
+      country_id %in% top_countries,
+      # TRUE-Zweig: ID als Zeichenkette, damit "others" passt
+      as.character(country_id),
+      # FALSE-Zweig
+      "others"
+    )
+  ) %>%
+  group_by(month_id, country_category) %>%
+  summarise(
+    n_fatalities = sum(outcome, na.rm = TRUE),
+    .groups      = "drop"
+  )
+
+# change country_id's to names
+fatalities_worldwide_plot_data <- fatalities_worldwide_plot_data %>%
+  mutate(
+    country_category = if_else(
+      country_category == "others",
+      "others",
+      # match liefert für jede ID die Position in country_id_list
+      country_id_list$name[
+        match(
+          as.character(country_category),
+          as.character(country_id_list$country_id)
+        )
+      ]
+    )
+  )
+
+# 5. Gestapeltes Säulendiagramm zeichnen 
+ggplot(fatalities_worldwide_plot_data, aes(fill=country_category, y=n_fatalities, x=month_id)) + 
+  geom_bar(position="stack", stat="identity") +
+  scale_fill_manual(
+    values = c("Ukraine" = "darkgreen", "Yemen" = "darkgreen",
+               "Afghanistan"="darkgreen","Syria" = "white",
+               "Ethiopia" = "#808080", "others" = "#D9D9D9")
+  ) +
+  labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+    axis.text.y = element_blank(),
+    axis.ticks.length.y = unit(0, "points"),
+    axis.ticks.x = element_blank(),
+    axis.title = element_blank(),
+    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
+    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+    legend.title = ggplot2::element_text(size = 15),
+    legend.text = ggplot2::element_text(size = 14),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.x = ggplot2::element_text(size = 14)
+  )
+
 
 
 
@@ -462,13 +542,67 @@ theme_setup <- ggplot2::theme(
 ## -----------------------------------------------------------------------------
 ## Number of Countries experiencing > 0 fatalities per month for the test window
 ## -----------------------------------------------------------------------------
+greater_zero_fatalities_plot_data <- observations_18_23 %>%
+  filter(outcome > 0) %>%
+  group_by(month_id) %>%
+  summarise(
+    n_countries = n_distinct(country_id),
+    .groups     = "drop"
+  )
 
-
+ggplot(greater_zero_fatalities_plot_data, aes(y = n_countries, x = month_id)) +
+  geom_bar(position="stack", stat="identity") +
+  labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+    legend.title = ggplot2::element_text(size = 15),
+    legend.text = ggplot2::element_text(size = 14),
+    axis.text.x = ggplot2::element_text(size = 14)
+  )
 
 
 ## -----------------------------------------------------------------------------
 ## Number of Onset events per month for the test window
 ## -----------------------------------------------------------------------------
+conflict_situations <- conflict_situations %>%
+  select(-situation_year)
+  
+onsets_per_month_plot_data <- conflict_situations %>%
+  group_by(month_id) %>%
+  summarise(
+    n_onset = sum(situation_month == "onset", na.rm = TRUE),
+    .groups  = "drop"
+  )
+
+
+ggplot(onsets_per_month_plot_data, aes(y = n_onset, x = month_id)) + 
+  geom_bar(position="stack", stat="identity") +
+  labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
+  theme_minimal() +
+  theme(
+    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
+    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+    legend.title = ggplot2::element_text(size = 15),
+    legend.text = ggplot2::element_text(size = 14),
+    axis.text.x = ggplot2::element_text(size = 14)
+  )
+
+## -----------------------------------------------------------------------------
+## Maybe: CRPS per Country: highlighting 5-10 most important ones (und other) 18 - 23
+## -----------------------------------------------------------------------------
+
+
+
+
+
+
+## -----------------------------------------------------------------------------
+## Maybe: Selected Onset Events
+## -----------------------------------------------------------------------------
+
+
 
 
 
