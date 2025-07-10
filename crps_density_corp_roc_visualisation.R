@@ -533,7 +533,7 @@ fatalities_worldwide_y_range <- fatalities_worldwide_plot_data %>%
   summarise(
     total_fatalities = sum(n_fatalities)
   )
-#max(fatalities_worldwide_y_range$total_fatalities)
+max(fatalities_worldwide_y_range$total_fatalities)
 
 
 fatalities_worldwide_plot <- ggplot(fatalities_worldwide_plot_data, aes(fill=country_category, y=n_fatalities, x=month_id)) + 
@@ -745,7 +745,7 @@ crps_worldwide_plot <- ggplot(crps_worldwide_plot_data, aes(fill=country_categor
                "Afghanistan"="#D55E00","Israel" = "#51103C",
                "Ethiopia" = "grey30", "others" = "#009E73")
   ) +
-  labs(title = "Mean CRPS Across Models for Top 5 Countries and All Others",
+  labs(title = "Sum of Mean CRPS Across Models for Top 5 Countries and All Others",
        x = "Month") + 
   scale_y_continuous(
     "Mean CRPS",
@@ -777,7 +777,7 @@ crps_worldwide_plot <- ggplot(crps_worldwide_plot_data, aes(fill=country_categor
   )
 
 ggsave("final_plots/crps_worldwide.png",
-       plot = crps_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+       plot = crps_worldwide_plot, width = 1.2 * 3500, height = 1.2 * 1322, dpi = 300, units = "px",
        bg="white")
 
 
