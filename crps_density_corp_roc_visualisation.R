@@ -262,9 +262,9 @@ actual_conflict <- actual_conflict %>%
            "prev_oct_id" = "month_id")
   )
 
-situation_month <- ifelse(!actual_conflict$conflict & !actual_conflict$prev_oct_id, "peace", # no conflict, no conflict
-                          ifelse(actual_conflict$conflict & !actual_conflict$prev_oct_id, "onset", # no conflict, conflict
-                                 ifelse(actual_conflict$conflict & actual_conflict$prev_oct_id, "conflict", # conflict, conflict
+situation_month <- ifelse(!actual_conflict$conflict & !actual_conflict$conflict_prev_oct, "peace", # no conflict, no conflict
+                          ifelse(actual_conflict$conflict & !actual_conflict$conflict_prev_oct, "onset", # no conflict, conflict
+                                 ifelse(actual_conflict$conflict & actual_conflict$conflict_prev_oct, "conflict", # conflict, conflict
                                         "deescalation"))) # conflict, no conflict
 
 
@@ -317,28 +317,6 @@ conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## -----
 ## Plot Data: CRPS values by conflict situation
 ## -----
@@ -349,7 +327,7 @@ models_crps_conflict <- lapply(models_scoring_rules, function(m) m %>% select("c
 names(models_crps_conflict) <- c("country_id", "month_id", model_names)
 models_crps_conflict <- list(models_crps_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
 
-models_crps_conflict_month <- models_crps_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum)
+models_crps_conflict_month <- models_crps_conflict %>% select(!c("country_id", "month_id")) %>% group_by(situation_month) %>% summarise_all(sum)
 
 models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] <- models_crps_conflict_month[,2:ncol(models_crps_conflict_month)] / nrow(models_crps_conflict) # compute contributions to average CRPS
 
@@ -379,7 +357,7 @@ models_brier_conflict <- list(models_brier_conflict, conflict_situations) %>% re
 ## -----
 # a) create ggplots of contributions to average Brier scores for all conflict situations
 ## -----
-models_brier_conflict_month <- models_brier_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum)
+models_brier_conflict_month <- models_brier_conflict %>% select(!c("country_id", "month_id")) %>% group_by(situation_month) %>% summarise_all(sum)
 
 models_brier_conflict_month[,2:ncol(models_brier_conflict_month)] <- models_brier_conflict_month[,2:ncol(models_brier_conflict_month)] / nrow(models_brier_conflict) # compute contributions to average brier
 
@@ -392,14 +370,14 @@ brier_month <- data.frame("Brier" = unlist(c(models_brier_conflict_month[,2:ncol
 ## ---
 ## Plot-Data: log-score values by conflict situation for the onset problem (y \in {0,1})
 ## ---
-models_logscore_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "log_score_eps_onset")) %>%
+models_logscore_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "log_score_onset")) %>%
   reduce(left_join, c("country_id", "month_id"))
 
 
 names(models_logscore_conflict) <- c("country_id", "month_id", model_names)
 models_logscore_conflict <- list(models_logscore_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
 
-models_logscore_conflict_month <- models_logscore_conflict %>% select(!c("country_id", "month_id", "situation_year")) %>% group_by(situation_month) %>% summarise_all(sum)
+models_logscore_conflict_month <- models_logscore_conflict %>% select(!c("country_id", "month_id")) %>% group_by(situation_month) %>% summarise_all(sum)
 
 models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] <- models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] / nrow(models_logscore_conflict) # compute contributions to average CRPS
 
@@ -414,8 +392,7 @@ prob_models_all_situation_long <- data.frame(
   month_id = integer(),
   country_id = integer(),
   onset_prob_pred = numeric(),
-  situation_month = character(),
-  situation_year = character()
+  situation_month = character()
 )
 
 # iterate over all models except the excluded_model in models_predictive_probabilities
@@ -631,9 +608,11 @@ fatalities_worldwide_plot <- ggplot(fatalities_worldwide_plot_data, aes(fill=cou
     axis.ticks       = element_line(color = "black")
   )
 
-ggsave("final_plots/fatalities_worldwide.png",
-       plot = fatalities_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
-       bg="white")
+fatalities_worldwide_plot
+
+# ggsave("final_plots/fatalities_worldwide.png",
+#        plot = fatalities_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+#        bg="white")
 
 
 ## -----------------------------------------------------------------------------
@@ -671,16 +650,15 @@ greater_zero_fatalities_plot <- ggplot(greater_zero_fatalities_plot_data, aes(y 
     axis.ticks       = element_line(color = "black")
   )
 
-ggsave("final_plots/greater_zero_fatalities.png",
-       plot = greater_zero_fatalities_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
-       bg="white")
+greater_zero_fatalities_plot
+
+# ggsave("final_plots/greater_zero_fatalities.png",
+#        plot = greater_zero_fatalities_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+#        bg="white")
 
 ## -----------------------------------------------------------------------------
 ## Number of Onset events per month for the test window
 ## -----------------------------------------------------------------------------
-conflict_situations <- conflict_situations %>%
-  select(-situation_year)
-  
 onsets_per_month_plot_data <- conflict_situations %>%
   group_by(month_id) %>%
   summarise(
@@ -714,9 +692,11 @@ onsets_per_month_plot <- ggplot(onsets_per_month_plot_data, aes(y = n_onset, x =
     axis.ticks       = element_line(color = "black")
   )
 
-ggsave("final_plots/onsets_per_month.png",
-       plot = onsets_per_month_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
-       bg="white")
+onsets_per_month_plot
+
+# ggsave("final_plots/onsets_per_month.png",
+#        plot = onsets_per_month_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+#        bg="white")
 
 ## -----------------------------------------------------------------------------
 ## Maybe: CRPS per Country: highlighting 5-10 most important ones (and other) 18 - 23
@@ -833,9 +813,11 @@ crps_worldwide_plot <- ggplot(crps_worldwide_plot_data, aes(fill=country_categor
     axis.ticks       = element_line(color = "black")
   )
 
-ggsave("final_plots/crps_worldwide.png",
-       plot = crps_worldwide_plot, width = 1.2 * 3500, height = 1.2 * 1322, dpi = 300, units = "px",
-       bg="white")
+crps_worldwide_plot
+
+# ggsave("final_plots/crps_worldwide.png",
+#        plot = crps_worldwide_plot, width = 1.2 * 3500, height = 1.2 * 1322, dpi = 300, units = "px",
+#        bg="white")
 
 
 ## -----------------------------------------------------------------------------
@@ -944,9 +926,11 @@ brier_worldwide_plot <- ggplot(brier_worldwide_plot_data, aes(fill=country_categ
     axis.ticks       = element_line(color = "black")
   )
 
-ggsave("final_plots/brier_worldwide.png",
-       plot = brier_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
-       bg="white")
+brier_worldwide_plot
+
+# ggsave("final_plots/brier_worldwide.png",
+#        plot = brier_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
+#        bg="white")
 
 
 ## -----------------------------------------------------------------------------
@@ -1037,175 +1021,175 @@ onset_event_plot <- function(data, selected_model_bool, country){
 
 
 
-## ---
-## In-depth: 8 models
-## ---
-
-##### onsets per year > 1
-# data_onset_events_month_notyear <- prev_peace_prob_month_long %>%
-#   filter(situation_month == "onset" &
-#            situation_year == "conflict")
-
-## Multiple Small Onsets in a short period of time
-# CAR: country 70 
-# ab onset monat 467 bis 477 interessant 
-# hat in test periode immer wieder ausbrüche von sehr 
-# niedriger höhe ~2 und einen höheren 46
-CAR_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
-  filter(country_id == 70 & 
-           month_id >= 466 &
-           month_id <= 477 &
-           model %in% selected_models)
-
-
-car_onset_plot_selected <- onset_event_plot(CAR_onset_predictions_dataset_selected, TRUE, "Central African Republic")
-
-ggsave("final_plots/car_onset_selected.png",
-       plot = car_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-       bg="white")
-
-
-## highest number of fatalities of any onset event
-# Ethopia: country 57 
-# onset month 491 mit max überhaupt von 1474 aber 
-# auch onset month 485 mit 16 fatalities 
-# (modelle täuschen sich stark: großer CRPS)
-Ethiopia_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
-  filter(country_id == 57 & 
-           month_id >= 481 &
-           month_id <= 492 &
-           model %in% selected_models)
-
-
-ethiopia_onset_plot_selected <- onset_event_plot(Ethiopia_onset_predictions_dataset_selected, TRUE, "Ethiopia")
-
-ggsave("final_plots/ethiopia_onset_selected.png",
-       plot = ethiopia_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-       bg="white")
-
-
-##### onsets per year = 1
-# data_onset_events_year <- prev_peace_prob_month_long %>%
-#   filter(situation_month == "onset" &
-#            situation_year == "onset")
-
-## Israel: country 218 
-# in month 497 maximum aus onset onset mit 252
-Israel_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
-  filter(country_id == 218 & 
-           month_id >= 486 &
-           month_id <= 497 &
-           model %in% selected_models)
-
-
-israel_onset_plot_selected <- onset_event_plot(Israel_onset_predictions_dataset_selected, TRUE, "Israel")
-
-ggsave("final_plots/israel_onset_selected.png",
-       plot = israel_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-       bg="white")
-
-##### onsets per year = 0
-#Poland 101
-# month 457 - 468
-Poland_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
-  filter(country_id == 101 & 
-           month_id >= 517 &
-           month_id <= 528 &
-           model %in% selected_models)
-
-
-poland_onset_plot_selected <- onset_event_plot(Poland_onset_predictions_dataset_selected, TRUE, "Poland")
-
-ggsave("final_plots/poland_onset_selected.png",
-       plot = poland_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-       bg="white")
-
-
-
-
-## ---
-## Remaining: 9 models
-## ---
-
-##### onsets per year > 1
-# data_onset_events_month_notyear <- prev_peace_prob_month_long %>%
-#   filter(situation_month == "onset" &
-#            situation_year == "conflict")
-
-## Multiple Small Onsets in a short period of time
-# CAR: country 70 
-# ab onset monat 467 bis 477 interessant 
-# hat in test periode immer wieder ausbrüche von sehr 
-# niedriger höhe ~2 und einen höheren 46
-CAR_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
-  filter(country_id == 70 & 
-           month_id >= 466 &
-           month_id <= 477 &
-           model %in% remaining_models)
-
-
-car_onset_plot_remaining <- onset_event_plot(CAR_onset_predictions_dataset_remaining, FALSE, "Central African Republic")
-
-ggsave("final_plots/car_onset_remaining.png",
-       plot = car_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-       bg="white")
-
-
-## highest number of fatalities of any onset event
-# Ethopia: country 57 
-# onset month 491 mit max überhaupt von 1474 aber 
-# auch onset month 485 mit 16 fatalities 
-# (modelle täuschen sich stark: großer CRPS)
-Ethiopia_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
-  filter(country_id == 57 & 
-           month_id >= 481 &
-           month_id <= 492 &
-           model %in% remaining_models)
-
-
-ethiopia_onset_plot_remaining <- onset_event_plot(Ethiopia_onset_predictions_dataset_remaining, FALSE, "Ethiopia")
-
-ggsave("final_plots/ethiopia_onset_remaining.png",
-       plot = ethiopia_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-       bg="white")
-
-
-##### onsets per year = 1
-# data_onset_events_year <- prev_peace_prob_month_long %>%
-#   filter(situation_month == "onset" &
-#            situation_year == "onset")
-
-## Israel: country 218 
-# in month 497 maximum aus onset onset mit 252
-Israel_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
-  filter(country_id == 218 & 
-           month_id >= 486 &
-           month_id <= 497 &
-           model %in% remaining_models)
-
-
-israel_onset_plot_remaining <- onset_event_plot(Israel_onset_predictions_dataset_remaining, FALSE, "Israel")
-
-ggsave("final_plots/israel_onset_remaining.png",
-       plot = israel_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-       bg="white")
-
-##### onsets per year = 0
-#Poland 101
-# month 457 - 468
-Poland_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
-  filter(country_id == 101 & 
-           month_id >= 517 &
-           month_id <= 528 &
-           model %in% remaining_models)
-
-
-poland_onset_plot_remaining <- onset_event_plot(Poland_onset_predictions_dataset_remaining, FALSE, "Poland")
-
-
-ggsave("final_plots/poland_onset_remaining.png",
-       plot = poland_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-       bg="white")
+# ## ---
+# ## In-depth: 8 models
+# ## ---
+# 
+# ##### onsets per year > 1
+# # data_onset_events_month_notyear <- prev_peace_prob_month_long %>%
+# #   filter(situation_month == "onset" &
+# #            situation_year == "conflict")
+# 
+# ## Multiple Small Onsets in a short period of time
+# # CAR: country 70 
+# # ab onset monat 467 bis 477 interessant 
+# # hat in test periode immer wieder ausbrüche von sehr 
+# # niedriger höhe ~2 und einen höheren 46
+# CAR_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+#   filter(country_id == 70 & 
+#            month_id >= 466 &
+#            month_id <= 477 &
+#            model %in% selected_models)
+# 
+# 
+# car_onset_plot_selected <- onset_event_plot(CAR_onset_predictions_dataset_selected, TRUE, "Central African Republic")
+# 
+# ggsave("final_plots/car_onset_selected.png",
+#        plot = car_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+#        bg="white")
+# 
+# 
+# ## highest number of fatalities of any onset event
+# # Ethopia: country 57 
+# # onset month 491 mit max überhaupt von 1474 aber 
+# # auch onset month 485 mit 16 fatalities 
+# # (modelle täuschen sich stark: großer CRPS)
+# Ethiopia_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+#   filter(country_id == 57 & 
+#            month_id >= 481 &
+#            month_id <= 492 &
+#            model %in% selected_models)
+# 
+# 
+# ethiopia_onset_plot_selected <- onset_event_plot(Ethiopia_onset_predictions_dataset_selected, TRUE, "Ethiopia")
+# 
+# ggsave("final_plots/ethiopia_onset_selected.png",
+#        plot = ethiopia_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+#        bg="white")
+# 
+# 
+# ##### onsets per year = 1
+# # data_onset_events_year <- prev_peace_prob_month_long %>%
+# #   filter(situation_month == "onset" &
+# #            situation_year == "onset")
+# 
+# ## Israel: country 218 
+# # in month 497 maximum aus onset onset mit 252
+# Israel_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+#   filter(country_id == 218 & 
+#            month_id >= 486 &
+#            month_id <= 497 &
+#            model %in% selected_models)
+# 
+# 
+# israel_onset_plot_selected <- onset_event_plot(Israel_onset_predictions_dataset_selected, TRUE, "Israel")
+# 
+# ggsave("final_plots/israel_onset_selected.png",
+#        plot = israel_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+#        bg="white")
+# 
+# ##### onsets per year = 0
+# #Poland 101
+# # month 457 - 468
+# Poland_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+#   filter(country_id == 101 & 
+#            month_id >= 517 &
+#            month_id <= 528 &
+#            model %in% selected_models)
+# 
+# 
+# poland_onset_plot_selected <- onset_event_plot(Poland_onset_predictions_dataset_selected, TRUE, "Poland")
+# 
+# ggsave("final_plots/poland_onset_selected.png",
+#        plot = poland_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+#        bg="white")
+# 
+# 
+# 
+# 
+# ## ---
+# ## Remaining: 9 models
+# ## ---
+# 
+# ##### onsets per year > 1
+# # data_onset_events_month_notyear <- prev_peace_prob_month_long %>%
+# #   filter(situation_month == "onset" &
+# #            situation_year == "conflict")
+# 
+# ## Multiple Small Onsets in a short period of time
+# # CAR: country 70 
+# # ab onset monat 467 bis 477 interessant 
+# # hat in test periode immer wieder ausbrüche von sehr 
+# # niedriger höhe ~2 und einen höheren 46
+# CAR_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+#   filter(country_id == 70 & 
+#            month_id >= 466 &
+#            month_id <= 477 &
+#            model %in% remaining_models)
+# 
+# 
+# car_onset_plot_remaining <- onset_event_plot(CAR_onset_predictions_dataset_remaining, FALSE, "Central African Republic")
+# 
+# ggsave("final_plots/car_onset_remaining.png",
+#        plot = car_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+#        bg="white")
+# 
+# 
+# ## highest number of fatalities of any onset event
+# # Ethopia: country 57 
+# # onset month 491 mit max überhaupt von 1474 aber 
+# # auch onset month 485 mit 16 fatalities 
+# # (modelle täuschen sich stark: großer CRPS)
+# Ethiopia_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+#   filter(country_id == 57 & 
+#            month_id >= 481 &
+#            month_id <= 492 &
+#            model %in% remaining_models)
+# 
+# 
+# ethiopia_onset_plot_remaining <- onset_event_plot(Ethiopia_onset_predictions_dataset_remaining, FALSE, "Ethiopia")
+# 
+# ggsave("final_plots/ethiopia_onset_remaining.png",
+#        plot = ethiopia_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+#        bg="white")
+# 
+# 
+# ##### onsets per year = 1
+# # data_onset_events_year <- prev_peace_prob_month_long %>%
+# #   filter(situation_month == "onset" &
+# #            situation_year == "onset")
+# 
+# ## Israel: country 218 
+# # in month 497 maximum aus onset onset mit 252
+# Israel_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+#   filter(country_id == 218 & 
+#            month_id >= 486 &
+#            month_id <= 497 &
+#            model %in% remaining_models)
+# 
+# 
+# israel_onset_plot_remaining <- onset_event_plot(Israel_onset_predictions_dataset_remaining, FALSE, "Israel")
+# 
+# ggsave("final_plots/israel_onset_remaining.png",
+#        plot = israel_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+#        bg="white")
+# 
+# ##### onsets per year = 0
+# #Poland 101
+# # month 457 - 468
+# Poland_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+#   filter(country_id == 101 & 
+#            month_id >= 517 &
+#            month_id <= 528 &
+#            model %in% remaining_models)
+# 
+# 
+# poland_onset_plot_remaining <- onset_event_plot(Poland_onset_predictions_dataset_remaining, FALSE, "Poland")
+# 
+# 
+# ggsave("final_plots/poland_onset_remaining.png",
+#        plot = poland_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+#        bg="white")
 
 
 ## -----------------------------------------------------------------------------
@@ -1382,8 +1366,13 @@ density_greqZero_selected_models_plot <- grid.arrange(arrangeGrob(p_density_greq
                                                                   left = y_density.grob, 
                                                                   bottom = x_density.grob))
 
-ggsave("final_plots/density_greqZero_selected_models.png",
-       plot = density_greqZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px")
+density_greqZero_selected_models_plot
+
+# ggsave("final_plots/density_greqZero_selected_models.png",
+#        plot = density_greqZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px")
+
+
+
 
 ## ---
 ## Remaining: 9 models
@@ -1454,8 +1443,10 @@ density_greqZero_remaining_models_plot <- grid.arrange(arrangeGrob(p_density_gre
                                                                     left = y_density.grob, 
                                                                     bottom = x_density.grob))
 
-ggsave("final_plots/density_greqZero_remaining_models.png",
-       plot = density_greqZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px")
+density_greqZero_remaining_models_plot
+
+# ggsave("final_plots/density_greqZero_remaining_models.png",
+#        plot = density_greqZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px")
 
 
 
@@ -1541,8 +1532,10 @@ density_greatZero_selected_models_plot <- grid.arrange(arrangeGrob(p_density_gre
                                                                    left = y_density.grob, 
                                                                    bottom = x_density.grob))
 
-ggsave("final_plots/density_greatZero_selected_models.png",
-       plot = density_greatZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px")
+density_greatZero_selected_models_plot
+
+# ggsave("final_plots/density_greatZero_selected_models.png",
+#        plot = density_greatZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px")
 
 
 
@@ -1615,8 +1608,10 @@ density_greatZero_remaining_models_plot <- grid.arrange(arrangeGrob(p_density_gr
                                                                    left = y_density.grob, 
                                                                    bottom = x_density.grob))
 
-ggsave("final_plots/density_greatZero_remaining_models.png",
-       plot = density_greatZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px")
+density_greatZero_remaining_models_plot
+
+# ggsave("final_plots/density_greatZero_remaining_models.png",
+#        plot = density_greatZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px")
 
 
 
@@ -1661,17 +1656,17 @@ crps_conflict_situation_plot <- ggplot(crps_month_selected_models,
 
 crps_conflict_situation_plot
 
-ggsave("final_plots/crps_conflict_situation.png",
-         plot = crps_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px")
+# ggsave("final_plots/crps_conflict_situation.png",
+#          plot = crps_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px")
 
 
 ## -----------------------------------------------------------------------------
 ## murphy diagram
 ## -----------------------------------------------------------------------------
 murphy_data <- prev_peace_prob_month_long_binary_actual %>%
-  select(1:6,8) %>%
+  select(1:5,8) %>%
   pivot_wider(names_from = model, values_from = onset_prob_pred) %>%
-  select(5:ncol(.))
+  select(4:ncol(.))
 
 
 ## ---
@@ -1700,8 +1695,6 @@ murphy_diagram_selected_models <- ggplot(df_est_conflict_selected) +
   theme(legend.position = "none",#"bottom
         aspect.ratio = 1)
 
-murphy_diagram_selected_models
-
 
 ## ---
 ## Remaining: 9 models
@@ -1729,7 +1722,6 @@ murphy_diagram_remaining_models <- ggplot(df_est_conflict_remaining) +
   theme(legend.position = "none",#"bottom
         aspect.ratio = 1)
 
-murphy_diagram_remaining_models
 
 
 ## -----------------------------------------------------------------------------
@@ -1791,7 +1783,6 @@ roc_curve_selected_models <- autoplot(evalmod(mm_selected_models), curvetype = "
   theme_setup +
   ggplot2::theme(legend.position = "none") #"bottom
 
-roc_curve_selected_models
 
 
 ## ---
@@ -1843,7 +1834,6 @@ roc_curve_remaining_models <- autoplot(evalmod(mm_remaining_models), curvetype =
   theme_setup +
   ggplot2::theme(legend.position = "none") #"bottom
 
-roc_curve_remaining_models
 
 ## -----------------------------------------------------------------------------
 ## Reliability diagram
@@ -2210,6 +2200,7 @@ new_triptych_remaining <- grid.arrange(
   heights = c(1, 1.65)
 )
 
+
 # ggsave("final_plots/tryptich_remaining_models.png",
 #        plot = new_triptych_remaining, width = 1.4 * 1875, height = 1.4 * 2890.6, dpi = 300, units = "px")
 
@@ -2530,7 +2521,7 @@ log_decomposition_results <- map2(
     #@param score 
     # A string specifying the score function.
     #'   One of: `"Brier_score"` (default), `"log_score"`, `"MR_score"`.
-    result <- mcbdsc(df %>% select(onset_prob_pred), y = df$actual_conflict, score="log_score")
+    result <- mcbdsc(df %>% select(onset_prob_pred_nplustwo), y = df$actual_conflict, score="log_score")
     
     # Extrahiere estimates + Modellname
     estimates(result) %>%
@@ -2792,7 +2783,7 @@ log_score_decomposition_all <- ggplot(log_score_decomposition_barplot_all, aes(x
   ) +
   labs(title = "MSC-DSC Mean log Score Decomposition") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+  scale_y_continuous(breaks = seq(0, 6, by = 0.5)) +
   theme(
     panel.spacing = unit(0, "points"),
     strip.background = element_blank(),
