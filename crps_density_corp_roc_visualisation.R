@@ -160,15 +160,18 @@ models_predictive_probabilities <- lapply(predictive_samples, function(pred_samp
   pred_sample %>%
     mutate("predicted_conflict" = outcome > 0) %>%
     group_by(country_id, month_id) %>%
-    summarise(predictive_probability = mean(predicted_conflict))
+    summarise(predictive_probability = mean(predicted_conflict),
+              predictive_probability_log_nplustwo = (sum(predicted_conflict)+1)/(length(outcome)+2))
 })
+
 
 # merge models_predictive_probabilities and models_crps into new list "models_scoring_rules"
 models_scoring_rules <- list()
 for (m in 1:n_models) {
   models_scoring_rules[[m]] <- models_crps[[m]] %>%
     left_join(models_predictive_probabilities[[m]], by = c("country_id", "month_id")) %>%
-    rename(onset_prob_pred = predictive_probability)
+    rename(onset_prob_pred = predictive_probability,
+           onset_prob_pred_nplustwo = predictive_probability_log_nplustwo)
 }
 names(models_scoring_rules) <- model_names
 
@@ -196,20 +199,12 @@ rm(models_predictive_probabilities, models_crps)
 ## -----
 # compute log-score on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
 ## -----
-# modified log-score to cure log(0)
-safe_log_score <- function(actual, p, eps = 1e-12) {
-  p_clipped <- pmin(pmax(p, eps), 1 - eps)
-  return(- (actual * log(p_clipped) +
-              (1 - actual) * log(1 - p_clipped)))
-}
-
 # compute log-scores
 models_scoring_rules <- lapply(models_scoring_rules, function(df) {
   df %>%
     mutate(
-      log_score_onset = - (actual_conflict * log(onset_prob_pred) +
-                             (1 - actual_conflict) * log(1 - onset_prob_pred)),
-      log_score_eps_onset = safe_log_score(actual_conflict, onset_prob_pred)
+      log_score_onset = - (actual_conflict * log(onset_prob_pred_nplustwo) +
+                             (1 - actual_conflict) * log(1 - onset_prob_pred_nplustwo))
     )
 })
 
@@ -248,38 +243,100 @@ observations_17 <- arrow::read_parquet(paste0(data_path,"cm_features.parquet")) 
   rename(outcome = ged_sb)
 
 observations_17_23 <- rbind(observations_17[,colnames(observations_18_23)], observations_18_23) %>%
-  arrange(country_id, month_id)
+  arrange(country_id, month_id) %>%
+  mutate(conflict = outcome>0)
 
 actual_conflict <- observations_17_23 %>%
   filter(country_id %in% country_ids) %>%
   filter(month_id %in% actuals_ids) %>%
-  mutate(conflict = outcome>0)
+  mutate(prev_oct_id = (actuals_ids[1]-3) + 12 * ((month_id - 457) %/% 12))
 
-prev_conflict <- list_cbind(lapply(1:12, function(prev_month) {
-  observations_17_23 %>%
-    filter(country_id %in% country_ids) %>%
-    filter(month_id %in% (actuals_ids - prev_month)) %>%
-    transmute(conflict = outcome>0)
-}))
 
-names(prev_conflict) <- paste0("lag_", 1:12)
+actual_conflict <- actual_conflict %>%
+  left_join(
+    observations_17_23 %>%
+      select(country_id,
+             month_id,
+             conflict_prev_oct = conflict),
+    by = c("country_id",
+           "prev_oct_id" = "month_id")
+  )
 
-conflict_prev_month <- prev_conflict$lag_1
-conflict_prev_year <- rowSums(prev_conflict)>0 # label previous period as conflict period, if at least one month had >0 fatalities
-
-situation_month <- ifelse(!actual_conflict$conflict & !conflict_prev_month, "peace", # no conflict, no conflict
-                          ifelse(actual_conflict$conflict & !conflict_prev_month, "onset", # no conflict, conflict
-                                 ifelse(actual_conflict$conflict & conflict_prev_month, "conflict", # conflict, conflict
+situation_month <- ifelse(!actual_conflict$conflict & !actual_conflict$prev_oct_id, "peace", # no conflict, no conflict
+                          ifelse(actual_conflict$conflict & !actual_conflict$prev_oct_id, "onset", # no conflict, conflict
+                                 ifelse(actual_conflict$conflict & actual_conflict$prev_oct_id, "conflict", # conflict, conflict
                                         "deescalation"))) # conflict, no conflict
 
-situation_year <- ifelse(!actual_conflict$conflict & !conflict_prev_year, "peace",
-                         ifelse(actual_conflict$conflict & !conflict_prev_year, "onset",
-                                ifelse(actual_conflict$conflict & conflict_prev_year, "conflict",
-                                       "deescalation")))
 
-sum(situation_month != situation_year)
+conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = as.vector(situation_month))
 
-conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = as.vector(situation_month), "situation_year" = as.vector(situation_year))
+
+
+
+
+
+# OLD Code: keep for now
+# observations_17 <- arrow::read_parquet(paste0(data_path,"cm_features.parquet")) %>%
+#   select(month_id, country_id, ged_sb) %>%
+#   filter(month_id %in% 445:456) %>%
+#   rename(outcome = ged_sb)
+# 
+# observations_17_23 <- rbind(observations_17[,colnames(observations_18_23)], observations_18_23) %>%
+#   arrange(country_id, month_id)
+# 
+# actual_conflict <- observations_17_23 %>%
+#   filter(country_id %in% country_ids) %>%
+#   filter(month_id %in% actuals_ids) %>%
+#   mutate(conflict = outcome>0)
+# 
+# prev_conflict <- list_cbind(lapply(1:12, function(prev_month) {
+#   observations_17_23 %>%
+#     filter(country_id %in% country_ids) %>%
+#     filter(month_id %in% (actuals_ids - prev_month)) %>%
+#     transmute(conflict = outcome>0)
+# }))
+# 
+# names(prev_conflict) <- paste0("lag_", 1:12)
+# 
+# conflict_prev_month <- prev_conflict$lag_1
+# conflict_prev_year <- rowSums(prev_conflict)>0 # label previous period as conflict period, if at least one month had >0 fatalities
+# 
+# situation_month <- ifelse(!actual_conflict$conflict & !conflict_prev_month, "peace", # no conflict, no conflict
+#                           ifelse(actual_conflict$conflict & !conflict_prev_month, "onset", # no conflict, conflict
+#                                  ifelse(actual_conflict$conflict & conflict_prev_month, "conflict", # conflict, conflict
+#                                         "deescalation"))) # conflict, no conflict
+# 
+# conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = as.vector(situation_month))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ## -----
@@ -2455,8 +2512,8 @@ brier_score_decomposition_all <- ggplot(brier_score_decomposition_barplot_all, a
 
 brier_score_decomposition_all
 
-ggsave("final_plots/brier_decomposition_all_models.png",
-       plot = brier_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px")
+# ggsave("final_plots/brier_decomposition_all_models.png",
+#        plot = brier_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px")
 
 
 ## -----------------------------------------------------------------------------
