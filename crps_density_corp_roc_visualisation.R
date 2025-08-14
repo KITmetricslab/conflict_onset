@@ -152,13 +152,18 @@ load("output/models_crps.RData")
 
 
 ## -----
-# compute Brier score on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
+## define lower threshold for binary event of a present conflict
 ## -----
+# conflict = monthly_fatalities > fatality_thresh
+#lower_fatalitiy_thresh = 0
+lower_fatalitiy_thresh = 24
+
+
 
 # compute empirical probabilities for the binary onset event
 models_predictive_probabilities <- lapply(predictive_samples, function(pred_sample) {
   pred_sample %>%
-    mutate("predicted_conflict" = outcome > 0) %>%
+    mutate("predicted_conflict" = outcome > lower_fatalitiy_thresh) %>%
     group_by(country_id, month_id) %>%
     summarise(predictive_probability = mean(predicted_conflict),
               predictive_probability_log_nplustwo = (sum(predicted_conflict)+1)/(length(outcome)+2))
@@ -183,11 +188,16 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
               by = c("country_id", "month_id"))
 })
 
+
+
+## -----
+# compute Brier score on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
+## -----
 # compute summands of brier score for each model, month and country
 models_scoring_rules <- lapply(models_scoring_rules, function(df) {
   df %>%
     mutate(
-      actual_conflict = actual > 0,
+      actual_conflict = actual > lower_fatalitiy_thresh,
       brier_onset = (actual_conflict - onset_prob_pred)^2
     )
 })
@@ -242,9 +252,28 @@ observations_17 <- arrow::read_parquet(paste0(data_path,"cm_features.parquet")) 
   filter(month_id %in% 445:456) %>%
   rename(outcome = ged_sb)
 
+
+
+
+#
+#
+#
+#
+#
+#
+
+
 observations_17_23 <- rbind(observations_17[,colnames(observations_18_23)], observations_18_23) %>%
   arrange(country_id, month_id) %>%
-  mutate(conflict = outcome>0)
+  mutate(conflict = outcome>lower_fatalitiy_thresh)
+
+
+#
+#
+#
+#
+#
+
 
 actual_conflict <- observations_17_23 %>%
   filter(country_id %in% country_ids) %>%
@@ -307,9 +336,6 @@ conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = 
 #                                         "deescalation"))) # conflict, no conflict
 # 
 # conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = as.vector(situation_month))
-
-
-
 
 
 
