@@ -253,26 +253,9 @@ observations_17 <- arrow::read_parquet(paste0(data_path,"cm_features.parquet")) 
   rename(outcome = ged_sb)
 
 
-
-
-#
-#
-#
-#
-#
-#
-
-
 observations_17_23 <- rbind(observations_17[,colnames(observations_18_23)], observations_18_23) %>%
   arrange(country_id, month_id) %>%
   mutate(conflict = outcome>lower_fatalitiy_thresh)
-
-
-#
-#
-#
-#
-#
 
 
 actual_conflict <- observations_17_23 %>%
@@ -298,48 +281,6 @@ situation_month <- ifelse(!actual_conflict$conflict & !actual_conflict$conflict_
 
 
 conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = as.vector(situation_month))
-
-
-
-
-
-
-# OLD Code: keep for now
-# observations_17 <- arrow::read_parquet(paste0(data_path,"cm_features.parquet")) %>%
-#   select(month_id, country_id, ged_sb) %>%
-#   filter(month_id %in% 445:456) %>%
-#   rename(outcome = ged_sb)
-# 
-# observations_17_23 <- rbind(observations_17[,colnames(observations_18_23)], observations_18_23) %>%
-#   arrange(country_id, month_id)
-# 
-# actual_conflict <- observations_17_23 %>%
-#   filter(country_id %in% country_ids) %>%
-#   filter(month_id %in% actuals_ids) %>%
-#   mutate(conflict = outcome>0)
-# 
-# prev_conflict <- list_cbind(lapply(1:12, function(prev_month) {
-#   observations_17_23 %>%
-#     filter(country_id %in% country_ids) %>%
-#     filter(month_id %in% (actuals_ids - prev_month)) %>%
-#     transmute(conflict = outcome>0)
-# }))
-# 
-# names(prev_conflict) <- paste0("lag_", 1:12)
-# 
-# conflict_prev_month <- prev_conflict$lag_1
-# conflict_prev_year <- rowSums(prev_conflict)>0 # label previous period as conflict period, if at least one month had >0 fatalities
-# 
-# situation_month <- ifelse(!actual_conflict$conflict & !conflict_prev_month, "peace", # no conflict, no conflict
-#                           ifelse(actual_conflict$conflict & !conflict_prev_month, "onset", # no conflict, conflict
-#                                  ifelse(actual_conflict$conflict & conflict_prev_month, "conflict", # conflict, conflict
-#                                         "deescalation"))) # conflict, no conflict
-# 
-# conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = as.vector(situation_month))
-
-
-
-
 
 
 
@@ -443,9 +384,92 @@ prev_peace_prob_month_long_binary_actual <- prev_peace_prob_month_long %>%
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ################################################################################
 ## PLOTS
 ################################################################################
+
+
+## -----
+## save plots in folders
+## ----
+store_plot <- TRUE
+
+## -----
+## labels, colors, textsize etc.
+## ----
+
 model_labels <- c(
   "zero"                         = "VIEWS Zero",
   "last"                         = "VIEWS Last",
@@ -505,16 +529,17 @@ selected_model_labels <- model_labels[selected_models]
 remaining_models <- setdiff(model_names, selected_models)
 
 remaining_colors <- c(
-  "#004B41",  # von "#009682"
-    "#233357",  # von "#4664aa"
-  "#19719D",  # von "#23a1e0"
-  "#4D4D4D",  # von "black"
-  "#6F4D0D",  # von "#df9b1b"
-  "#46631E",  # von "#8cb63c"
-  "#511111",  # von "#a22223"
-  "#51103C",   # von "#a3107c"
-  "#2B1A05"    # additional
+  "#009682",  # green  
+  "#4664aa",  # blue
+  "#23a1e0",  # maygreen
+  "black", # grey
+  "#df9b1b",  # orange
+  "#8cb63c",  # yellow
+  "#a22223",  # red
+  "#a3107c",   # purple
+  "#51103C"    # additional color
 )
+
 
 remaining_model_colors <- setNames(remaining_colors, remaining_models)
 
@@ -525,12 +550,14 @@ model_colors <- c(
   remaining_model_colors
 )
 
-theme_setup <- ggplot2::theme(
+
+
+
+theme_fontsize <- ggplot2::theme(
   plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
   axis.title = ggplot2::element_text(size = 13),
-  legend.title = ggplot2::element_text(size = 13),
   axis.text = ggplot2::element_text(size = 12),
-  legend.text = ggplot2::element_text(size = 11)
+  legend.text = element_text(size = 12),
 )
 
 
@@ -594,7 +621,7 @@ fatalities_worldwide_y_range <- fatalities_worldwide_plot_data %>%
     total_fatalities = sum(n_fatalities)
   )
 max(fatalities_worldwide_y_range$total_fatalities)
-
+#####
 
 fatalities_worldwide_plot <- ggplot(fatalities_worldwide_plot_data, aes(fill=country_category, y=n_fatalities, x=month_id)) + 
   geom_bar(position="stack", stat="identity") +
@@ -620,25 +647,33 @@ fatalities_worldwide_plot <- ggplot(fatalities_worldwide_plot_data, aes(fill=cou
   scale_x_continuous(
     breaks = seq(min(fatalities_months), max(fatalities_months), by = 6),
     labels = month_lookup_vec[as.character(seq(min(fatalities_months), max(fatalities_months), by = 6))]
-  ) +
-  theme_minimal() +
+  ) + theme_minimal() +
   theme(
     panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
-    plot.title = element_text(size = 16, hjust = 0.5),
     legend.title = element_blank(),
-    legend.text = element_text(size = 12),
-    axis.text = element_text(size = 9),
-    axis.title = element_text(size = 13),
-    axis.ticks       = element_line(color = "black")
-  )
+    axis.ticks = element_line(color = "black")
+  ) + 
+  theme_fontsize
+
+
+
 
 fatalities_worldwide_plot
 
-# ggsave("final_plots/fatalities_worldwide.png",
-#        plot = fatalities_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
-#        bg="white")
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/fatalities_worldwide_1.png",
+           plot = fatalities_worldwide_plot, width = 1.2 * 3000, height = 1.2 * 1322, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/fatalities_worldwide_25.png",
+           plot = fatalities_worldwide_plot, width = 1.2 * 3000, height = 1.2 * 1322, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
 
 
 ## -----------------------------------------------------------------------------
@@ -651,6 +686,7 @@ greater_zero_fatalities_plot_data <- observations_18_23 %>%
     n_countries = n_distinct(country_id),
     .groups     = "drop"
   )
+#####
 
 greater_zero_fatalities_plot <- ggplot(greater_zero_fatalities_plot_data, aes(y = n_countries, x = month_id)) +
   geom_bar(position="stack", stat="identity",fill  = "orange3", alpha = 0.7, width = 0.7, color = "black") +
@@ -662,25 +698,30 @@ greater_zero_fatalities_plot <- ggplot(greater_zero_fatalities_plot_data, aes(y 
   ) +
   scale_y_continuous(
     "Countries"
-  ) +
-  theme_minimal() +
+  ) + theme_minimal() +
   theme(
     panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
-    plot.title = element_text(size = 16, hjust = 0.5),
     legend.title = element_blank(),
-    legend.text = element_text(size = 12),
-    axis.text = element_text(size = 9),
-    axis.title = element_text(size = 13),
     axis.ticks       = element_line(color = "black")
-  )
+  ) + 
+  theme_fontsize
 
 greater_zero_fatalities_plot
 
-# ggsave("final_plots/greater_zero_fatalities.png",
-#        plot = greater_zero_fatalities_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
-#        bg="white")
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/greater_zero_fatalities_1.png",
+           plot = greater_zero_fatalities_plot, width = 1.2 * 3000, height = 1.2 * 1322, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/greater_zero_fatalities_25.png",
+           plot = greater_zero_fatalities_plot, width = 1.2 * 3000, height = 1.2 * 1322, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 ## -----------------------------------------------------------------------------
 ## Number of Onset events per month for the test window
@@ -691,7 +732,7 @@ onsets_per_month_plot_data <- conflict_situations %>%
     n_onset = sum(situation_month == "onset", na.rm = TRUE),
     .groups  = "drop"
   )
-
+#####
 
 onsets_per_month_plot <- ggplot(onsets_per_month_plot_data, aes(y = n_onset, x = month_id)) + 
   geom_bar(position="stack", stat="identity",fill  = "orange3", alpha = 0.7, width = 0.7, color = "black") +
@@ -710,19 +751,24 @@ onsets_per_month_plot <- ggplot(onsets_per_month_plot_data, aes(y = n_onset, x =
     panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
-    plot.title = element_text(size = 16, hjust = 0.5),
     legend.title = element_blank(),
-    legend.text = element_text(size = 12),
-    axis.text = element_text(size = 9),
-    axis.title = element_text(size = 13),
-    axis.ticks       = element_line(color = "black")
-  )
+    axis.ticks = element_line(color = "black")
+  ) + 
+  theme_fontsize
 
 onsets_per_month_plot
 
-# ggsave("final_plots/onsets_per_month.png",
-#        plot = onsets_per_month_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
-#        bg="white")
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/onsets_per_month_1.png",
+           plot = onsets_per_month_plot, width = 1.2 * 3000, height = 1.2 * 1322, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/onsets_per_month_25.png",
+           plot = onsets_per_month_plot, width = 1.2 * 3000, height = 1.2 * 1322, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 ## -----------------------------------------------------------------------------
 ## Maybe: CRPS per Country: highlighting 5-10 most important ones (and other) 18 - 23
@@ -799,7 +845,7 @@ crps_worldwide_y_range <- crps_worldwide_plot_data %>%
     avg_crps = sum(sum_avg_crps)
   )
 # max(crps_worldwide_y_range$avg_crps)
-
+#####
 
 crps_worldwide_plot <- ggplot(crps_worldwide_plot_data, aes(fill=country_category, y=sum_avg_crps, x=month_id)) + 
   geom_bar(position="stack", stat="identity") +
@@ -831,132 +877,25 @@ crps_worldwide_plot <- ggplot(crps_worldwide_plot_data, aes(fill=country_categor
     panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
-    plot.title = element_text(size = 16, hjust = 0.5),
     legend.title = element_blank(),
-    legend.text = element_text(size = 12),
-    axis.text = element_text(size = 9),
-    axis.title = element_text(size = 13),
     axis.ticks       = element_line(color = "black")
-  )
+  ) + 
+  theme_fontsize
 
 crps_worldwide_plot
 
-# ggsave("final_plots/crps_worldwide.png",
-#        plot = crps_worldwide_plot, width = 1.2 * 3500, height = 1.2 * 1322, dpi = 300, units = "px",
-#        bg="white")
 
-
-## -----------------------------------------------------------------------------
-## Maybe: BRIER for onset cases (previous peace) per Country: 
-## highlighting 5-10 most important ones (and other) 18 - 23
-## -----------------------------------------------------------------------------
-average_BRIERscores_over_all_models_18_23 <- prev_peace_prob_month_long %>%
-  select(
-    month_id,
-    country_id,
-    brier_onset
-  ) %>%
-  group_by(
-    month_id,
-    country_id
-  ) %>%
-  summarise(
-    mean_brier = mean(brier_onset, na.rm = TRUE),
-    .groups   = "drop"
-  )
-
-
-# 3. Top-Länder bestimmen 
-top_country_brier <- average_BRIERscores_over_all_models_18_23 %>%
-  group_by(country_id) %>%
-  summarise(
-    total_brier = sum(mean_brier, na.rm = TRUE),
-    .groups          = "drop"
-  ) %>%
-  slice_max(total_brier, n = 5) 
-
-top_countries_brier <- top_country_brier %>%
-  pull(country_id)
-
-
-brier_worldwide_plot_data <- average_BRIERscores_over_all_models_18_23 %>%
-  mutate(
-    # if_else liefert immer einen Vektor gleicher Länge
-    country_category = if_else(
-      country_id %in% top_countries_brier,
-      # TRUE-Zweig: ID als Zeichenkette, damit "others" passt
-      as.character(country_id),
-      # FALSE-Zweig
-      "others"
-    )
-  ) %>%
-  group_by(month_id, country_category) %>%
-  summarise(
-    sum_avg_brier = sum(mean_brier, na.rm = TRUE),
-    .groups      = "drop"
-  )
-
-# change country_id's to names
-brier_worldwide_plot_data <- brier_worldwide_plot_data %>%
-  mutate(
-    country_category = if_else(
-      country_category == "others",
-      "others",
-      # match liefert für jede ID die Position in country_id_list
-      country_id_list$name[
-        match(
-          as.character(country_category),
-          as.character(country_id_list$country_id)
-        )
-      ]
-    )
-  )
-
-brier_months <- sort(unique(brier_worldwide_plot_data$month_id))
-
-
-brier_worldwide_plot <- ggplot(brier_worldwide_plot_data, aes(fill=country_category, y=sum_avg_brier, x=month_id)) + 
-  geom_bar(position="stack", stat="identity") +
-  scale_fill_manual(
-    values = c("Libya" = "#E69F00", "Bangladesh" = "#0072B2",
-               "Burundi"="#D55E00","Peru" = "#51103C",
-               "Rwanda" = "grey30", "others" = "#009E73")
-  ) +
-  labs(title = "Mean BRIER-Score (Onset) Across Models for Top 5 Countries and All Others",
-       x = "Month") + 
-  scale_y_continuous(
-    "Mean BRIER Score",
-    labels = function(x) {
-      # format() fügt Tausender‐Punkte und Komma‐Dezimal an
-      format(x,
-             big.mark    = ".",
-             decimal.mark= ",",
-             scientific  = FALSE,
-             trim        = TRUE)
-    }
-  ) + 
-  scale_x_continuous(
-    breaks = seq(min(brier_months), max(brier_months), by = 6),
-    labels = month_lookup_vec[as.character(seq(min(brier_months), max(brier_months), by = 6))]
-  ) +
-  theme_minimal() +
-  theme(
-    panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor.x = element_blank(),
-    plot.title = element_text(size = 16, hjust = 0.5),
-    legend.title = element_blank(),
-    legend.text = element_text(size = 12),
-    axis.text = element_text(size = 9),
-    axis.title = element_text(size = 13),
-    axis.ticks       = element_line(color = "black")
-  )
-
-brier_worldwide_plot
-
-# ggsave("final_plots/brier_worldwide.png",
-#        plot = brier_worldwide_plot, width = 1.2 * 2822, height = 1.2 * 1322, dpi = 300, units = "px",
-#        bg="white")
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/crps_worldwide_1.png",
+           plot = crps_worldwide_plot, width = 1.2 * 3500, height = 1.2 * 1322, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/crps_worldwide_25.png",
+           plot = crps_worldwide_plot, width = 1.2 * 3500, height = 1.2 * 1322, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 
 ## -----------------------------------------------------------------------------
@@ -1028,17 +967,14 @@ onset_event_plot <- function(data, selected_model_bool, country){
       panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
       panel.grid.major.x = element_blank(),
       panel.grid.minor.x = element_blank(),
-      plot.title = element_text(size = 16, hjust = 0.5),
       legend.title = element_blank(),
-      legend.text = element_text(size = 12),
-      axis.text = element_text(size = 9),
-      axis.title = element_text(size = 13),
       axis.ticks       = element_line(color = "black"),
       axis.line.y.right = element_line(color = "grey40"),
       axis.ticks.y.right = element_line(color = "grey40"),
       axis.text.y.right = element_text(color = "grey40"), 
       axis.title.y.right = element_text(color = "grey40")
-    )
+    ) + 
+    theme_fontsize
   return(p)
   
 }
@@ -1047,175 +983,156 @@ onset_event_plot <- function(data, selected_model_bool, country){
 
 
 
-# ## ---
-# ## In-depth: 8 models
-# ## ---
-# 
-# ##### onsets per year > 1
-# # data_onset_events_month_notyear <- prev_peace_prob_month_long %>%
-# #   filter(situation_month == "onset" &
-# #            situation_year == "conflict")
-# 
-# ## Multiple Small Onsets in a short period of time
-# # CAR: country 70 
-# # ab onset monat 467 bis 477 interessant 
-# # hat in test periode immer wieder ausbrüche von sehr 
-# # niedriger höhe ~2 und einen höheren 46
-# CAR_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
-#   filter(country_id == 70 & 
-#            month_id >= 466 &
-#            month_id <= 477 &
-#            model %in% selected_models)
-# 
-# 
-# car_onset_plot_selected <- onset_event_plot(CAR_onset_predictions_dataset_selected, TRUE, "Central African Republic")
-# 
-# ggsave("final_plots/car_onset_selected.png",
-#        plot = car_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-#        bg="white")
-# 
-# 
-# ## highest number of fatalities of any onset event
-# # Ethopia: country 57 
-# # onset month 491 mit max überhaupt von 1474 aber 
-# # auch onset month 485 mit 16 fatalities 
-# # (modelle täuschen sich stark: großer CRPS)
-# Ethiopia_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
-#   filter(country_id == 57 & 
-#            month_id >= 481 &
-#            month_id <= 492 &
-#            model %in% selected_models)
-# 
-# 
-# ethiopia_onset_plot_selected <- onset_event_plot(Ethiopia_onset_predictions_dataset_selected, TRUE, "Ethiopia")
-# 
-# ggsave("final_plots/ethiopia_onset_selected.png",
-#        plot = ethiopia_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-#        bg="white")
-# 
-# 
-# ##### onsets per year = 1
-# # data_onset_events_year <- prev_peace_prob_month_long %>%
-# #   filter(situation_month == "onset" &
-# #            situation_year == "onset")
-# 
-# ## Israel: country 218 
-# # in month 497 maximum aus onset onset mit 252
-# Israel_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
-#   filter(country_id == 218 & 
-#            month_id >= 486 &
-#            month_id <= 497 &
-#            model %in% selected_models)
-# 
-# 
-# israel_onset_plot_selected <- onset_event_plot(Israel_onset_predictions_dataset_selected, TRUE, "Israel")
-# 
-# ggsave("final_plots/israel_onset_selected.png",
-#        plot = israel_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-#        bg="white")
-# 
-# ##### onsets per year = 0
-# #Poland 101
-# # month 457 - 468
-# Poland_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
-#   filter(country_id == 101 & 
-#            month_id >= 517 &
-#            month_id <= 528 &
-#            model %in% selected_models)
-# 
-# 
-# poland_onset_plot_selected <- onset_event_plot(Poland_onset_predictions_dataset_selected, TRUE, "Poland")
-# 
-# ggsave("final_plots/poland_onset_selected.png",
-#        plot = poland_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-#        bg="white")
-# 
-# 
-# 
-# 
-# ## ---
-# ## Remaining: 9 models
-# ## ---
-# 
-# ##### onsets per year > 1
-# # data_onset_events_month_notyear <- prev_peace_prob_month_long %>%
-# #   filter(situation_month == "onset" &
-# #            situation_year == "conflict")
-# 
-# ## Multiple Small Onsets in a short period of time
-# # CAR: country 70 
-# # ab onset monat 467 bis 477 interessant 
-# # hat in test periode immer wieder ausbrüche von sehr 
-# # niedriger höhe ~2 und einen höheren 46
-# CAR_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
-#   filter(country_id == 70 & 
-#            month_id >= 466 &
-#            month_id <= 477 &
-#            model %in% remaining_models)
-# 
-# 
-# car_onset_plot_remaining <- onset_event_plot(CAR_onset_predictions_dataset_remaining, FALSE, "Central African Republic")
-# 
-# ggsave("final_plots/car_onset_remaining.png",
-#        plot = car_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-#        bg="white")
-# 
-# 
-# ## highest number of fatalities of any onset event
-# # Ethopia: country 57 
-# # onset month 491 mit max überhaupt von 1474 aber 
-# # auch onset month 485 mit 16 fatalities 
-# # (modelle täuschen sich stark: großer CRPS)
-# Ethiopia_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
-#   filter(country_id == 57 & 
-#            month_id >= 481 &
-#            month_id <= 492 &
-#            model %in% remaining_models)
-# 
-# 
-# ethiopia_onset_plot_remaining <- onset_event_plot(Ethiopia_onset_predictions_dataset_remaining, FALSE, "Ethiopia")
-# 
-# ggsave("final_plots/ethiopia_onset_remaining.png",
-#        plot = ethiopia_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-#        bg="white")
-# 
-# 
-# ##### onsets per year = 1
-# # data_onset_events_year <- prev_peace_prob_month_long %>%
-# #   filter(situation_month == "onset" &
-# #            situation_year == "onset")
-# 
-# ## Israel: country 218 
-# # in month 497 maximum aus onset onset mit 252
-# Israel_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
-#   filter(country_id == 218 & 
-#            month_id >= 486 &
-#            month_id <= 497 &
-#            model %in% remaining_models)
-# 
-# 
-# israel_onset_plot_remaining <- onset_event_plot(Israel_onset_predictions_dataset_remaining, FALSE, "Israel")
-# 
-# ggsave("final_plots/israel_onset_remaining.png",
-#        plot = israel_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-#        bg="white")
-# 
-# ##### onsets per year = 0
-# #Poland 101
-# # month 457 - 468
-# Poland_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
-#   filter(country_id == 101 & 
-#            month_id >= 517 &
-#            month_id <= 528 &
-#            model %in% remaining_models)
-# 
-# 
-# poland_onset_plot_remaining <- onset_event_plot(Poland_onset_predictions_dataset_remaining, FALSE, "Poland")
-# 
-# 
-# ggsave("final_plots/poland_onset_remaining.png",
-#        plot = poland_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
-#        bg="white")
+## ---
+## In-depth: 8 models
+## ---
+
+## Multiple Small Onsets in a short period of time
+# CAR: country 70
+CAR_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+  filter(country_id == 70 &
+           month_id >= 488 &
+           month_id <= 500 &
+           model %in% selected_models)
+
+
+car_onset_plot_selected <- onset_event_plot(CAR_onset_predictions_dataset_selected, TRUE, "Central African Republic")
+
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/car_onset_selected_1.png",
+           plot = car_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/car_onset_selected_25.png",
+           plot = car_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
+
+## highest number of fatalities of any onset event
+# Ethopia: country 57
+Ethiopia_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+  filter(country_id == 57 &
+           month_id >= 488 &
+           month_id <= 500 &
+           model %in% selected_models)
+
+ethiopia_onset_plot_selected <- onset_event_plot(Ethiopia_onset_predictions_dataset_selected, TRUE, "Ethiopia")
+
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/ethiopia_onset_selected_1.png",
+           plot = ethiopia_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/ethiopia_onset_selected_25.png",
+           plot = ethiopia_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
+## Israel: country 218
+Israel_onset_predictions_dataset_selected <- prob_models_all_situation_long %>%
+  filter(country_id == 218 &
+           month_id >= 516 &
+           month_id <= 528 &
+           model %in% selected_models)
+
+israel_onset_plot_selected <- onset_event_plot(Israel_onset_predictions_dataset_selected, TRUE, "Israel")
+
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/israel_onset_selected_1.png",
+           plot = israel_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/israel_onset_selected_25.png",
+           plot = israel_onset_plot_selected, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
+
+## ---
+## Remaining: 9 models
+## ---
+## Multiple Small Onsets in a short period of time
+# CAR: country 70
+CAR_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+  filter(country_id == 70 &
+           month_id >= 488 &
+           month_id <= 500 &
+           model %in% remaining_models)
+
+
+car_onset_plot_remaining <- onset_event_plot(CAR_onset_predictions_dataset_remaining, FALSE, "Central African Republic")
+
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/car_onset_remaining_1.png",
+           plot = car_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/car_onset_remaining_25.png",
+           plot = car_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
+
+## highest number of fatalities of any onset event
+# Ethopia: country 57
+Ethiopia_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+  filter(country_id == 57 &
+           month_id >= 488 &
+           month_id <= 500 &
+           model %in% remaining_models)
+
+
+ethiopia_onset_plot_remaining <- onset_event_plot(Ethiopia_onset_predictions_dataset_remaining, FALSE, "Ethiopia")
+
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/ethiopia_onset_remaining_1.png",
+           plot = ethiopia_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/ethiopia_onset_remaining_25.png",
+           plot = ethiopia_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
+## Israel: country 218
+Israel_onset_predictions_dataset_remaining <- prob_models_all_situation_long %>%
+  filter(country_id == 218 &
+           month_id >= 516 &
+           month_id <= 528 &
+           model %in% remaining_models)
+
+
+israel_onset_plot_remaining <- onset_event_plot(Israel_onset_predictions_dataset_remaining, FALSE, "Israel")
+
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/israel_onset_remaining_1.png",
+           plot = israel_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/israel_onset_remaining_25.png",
+           plot = israel_onset_plot_remaining, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
 
 
 ## -----------------------------------------------------------------------------
@@ -1394,9 +1311,18 @@ density_greqZero_selected_models_plot <- grid.arrange(arrangeGrob(p_density_greq
 
 density_greqZero_selected_models_plot
 
-# ggsave("final_plots/density_greqZero_selected_models.png",
-#        plot = density_greqZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px")
 
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/density_greqZero_selected_models_1.png",
+           plot = density_greqZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/density_greqZero_selected_models_25.png",
+           plot = density_greqZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 
 
@@ -1471,9 +1397,17 @@ density_greqZero_remaining_models_plot <- grid.arrange(arrangeGrob(p_density_gre
 
 density_greqZero_remaining_models_plot
 
-# ggsave("final_plots/density_greqZero_remaining_models.png",
-#        plot = density_greqZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px")
-
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/density_greqZero_remaining_models_1.png",
+           plot = density_greqZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/density_greqZero_remaining_models_25.png",
+           plot = density_greqZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 
 ## -----------------------------------------------------------------------------
@@ -1560,9 +1494,17 @@ density_greatZero_selected_models_plot <- grid.arrange(arrangeGrob(p_density_gre
 
 density_greatZero_selected_models_plot
 
-# ggsave("final_plots/density_greatZero_selected_models.png",
-#        plot = density_greatZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px")
-
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/density_greatZero_selected_models_1.png",
+           plot = density_greatZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/density_greatZero_selected_models_25.png",
+           plot = density_greatZero_selected_models_plot, width = 1.4 * 3200, height = 1.4 * 1700, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 
 ## ---
@@ -1636,9 +1578,17 @@ density_greatZero_remaining_models_plot <- grid.arrange(arrangeGrob(p_density_gr
 
 density_greatZero_remaining_models_plot
 
-# ggsave("final_plots/density_greatZero_remaining_models.png",
-#        plot = density_greatZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px")
-
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/density_greatZero_remaining_models_1.png",
+           plot = density_greatZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/density_greatZero_remaining_models_25.png",
+           plot = density_greatZero_remaining_models_plot, width = 1.5 * 2200, height = 1.5 * 2000, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 
 
@@ -1682,9 +1632,17 @@ crps_conflict_situation_plot <- ggplot(crps_month_selected_models,
 
 crps_conflict_situation_plot
 
-# ggsave("final_plots/crps_conflict_situation.png",
-#          plot = crps_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px")
-
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/crps_conflict_situation_1.png",
+           plot = crps_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/crps_conflict_situation_25.png",
+           plot = crps_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 ## -----------------------------------------------------------------------------
 ## murphy diagram
@@ -2212,8 +2170,18 @@ new_triptych_selected <- grid.arrange(
   heights = c(1, 0.895)
 )
 
-# ggsave("final_plots/tryptich_selected_models.png",
-#        plot = new_triptych_selected, width = 1.5 * 2100, height = 1.5 * 2200, dpi = 300, units = "px")
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/tryptich_selected_models.png",
+           plot = new_triptych_selected, width = 1.5 * 2100, height = 1.5 * 2200, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/tryptich_selected_models.png",
+           plot = new_triptych_selected, width = 1.5 * 2100, height = 1.5 * 2200, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 ## ---
 ## Remaining: 9 models
@@ -2226,10 +2194,17 @@ new_triptych_remaining <- grid.arrange(
   heights = c(1, 1.65)
 )
 
-
-# ggsave("final_plots/tryptich_remaining_models.png",
-#        plot = new_triptych_remaining, width = 1.4 * 1875, height = 1.4 * 2890.6, dpi = 300, units = "px")
-
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/tryptich_remaining_models_1.png",
+           plot = new_triptych_remaining, width = 1.4 * 1875, height = 1.4 * 2890.6, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/tryptich_remaining_models_25.png",
+           plot = new_triptych_remaining, width = 1.4 * 1875, height = 1.4 * 2890.6, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 ## -----------------------------------------------------------------------------
 ## BRIER: MSC-DSC-plots
@@ -2393,10 +2368,17 @@ brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_s
 brier_score_decomposition_selected
 
 
-# ggsave("final_plots/brier_score_decomposition_selected.png",
-#        plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px")
-
-
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/brier_score_decomposition_selected_1.png",
+           plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/brier_score_decomposition_selected_25.png",
+           plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 ## ---
 ## All models
@@ -2529,9 +2511,17 @@ brier_score_decomposition_all <- ggplot(brier_score_decomposition_barplot_all, a
 
 brier_score_decomposition_all
 
-# ggsave("final_plots/brier_decomposition_all_models.png",
-#        plot = brier_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px")
-
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/brier_decomposition_all_models_1.png",
+           plot = brier_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/brier_decomposition_all_models_25.png",
+           plot = brier_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 ## -----------------------------------------------------------------------------
 ## LOG: MSC-DSC-plots
@@ -2694,10 +2684,18 @@ log_score_decomposition_selected <- ggplot(log_score_decomposition_barplot_selec
 log_score_decomposition_selected
 
 
-# ggsave("final_plots/log_score_decomposition_selected.png",
-#        plot = log_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px")
 
-
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/log_score_decomposition_selected_1.png",
+           plot = log_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/log_score_decomposition_selected_25.png",
+           plot = log_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+           bg="white")
+  }
+}
 
 
 ## ---
@@ -2831,5 +2829,15 @@ log_score_decomposition_all <- ggplot(log_score_decomposition_barplot_all, aes(x
 
 log_score_decomposition_all
 
-# ggsave("final_plots/log_score_decomposition_all_models.png",
-#        plot = log_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px")
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/log_score_decomposition_all_models_1.png",
+           plot = log_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/log_score_decomposition_all_models_25.png",
+           plot = log_score_decomposition_all, width = 1.2 * 2297, height = 1.4 * 2181, dpi = 300, units = "px",
+           bg="white")
+  }
+}
