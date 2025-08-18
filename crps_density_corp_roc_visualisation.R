@@ -560,6 +560,13 @@ theme_fontsize <- ggplot2::theme(
   legend.text = element_text(size = 12),
 )
 
+theme_fontsize_large <- ggplot2::theme(
+  plot.title = ggplot2::element_text(size = 22, hjust = 0.5),
+  axis.title = ggplot2::element_text(size = 16),
+  axis.text = ggplot2::element_text(size = 16),
+  legend.text = element_text(size = 16),
+)
+
 
 ## -----------------------------------------------------------------------------
 ## Number of total fatalities worldwide per month, stacked bar plot
@@ -1189,7 +1196,8 @@ create_distribution_plot <- function(data, model_name){
       panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),
       axis.title.x = element_blank(),
       axis.title.y = element_blank()
-    )
+    ) +
+    theme_fontsize
   
   
   if(model_name == "zero"){
@@ -1625,10 +1633,14 @@ crps_conflict_situation_plot <- ggplot(crps_month_selected_models,
        x = "Mean CRPS") +
   scale_fill_manual("Situation", values = c("conflict" = "#a22223", "deescalation" = "#009682", "onset" = "#df9b1b", "peace" = "#4664aa"),
                     labels = c("conflict" = "Conflict", "deescalation" = "Deescalation", "onset" = "Onset", "peace" = "Peace")) +
-  theme_setup +
+  theme_minimal() +
   theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
     axis.ticks.y = element_blank(),
-    axis.text.y = element_text(colour = col_vec))
+    legend.title = element_blank(),
+    axis.text.y = element_text(colour = col_vec)) +
+  theme_fontsize_large
 
 crps_conflict_situation_plot
 
@@ -1675,9 +1687,9 @@ murphy_diagram_selected_models <- ggplot(df_est_conflict_selected) +
     y = "Mean elementary score",
     color = ""
   ) + 
-  theme_setup + 
   theme(legend.position = "none",#"bottom
-        aspect.ratio = 1)
+        aspect.ratio = 1) +
+  theme_fontsize_large
 
 
 ## ---
@@ -1702,9 +1714,9 @@ murphy_diagram_remaining_models <- ggplot(df_est_conflict_remaining) +
     y = "Mean elementary score",
     color = ""
   ) + 
-  theme_setup + 
   theme(legend.position = "none",#"bottom
-        aspect.ratio = 1)
+        aspect.ratio = 1) +
+  theme_fontsize_large
 
 
 
@@ -1764,8 +1776,8 @@ roc_curve_selected_models <- autoplot(evalmod(mm_selected_models), curvetype = "
     y = "HR",
     color = ""
   ) +
-  theme_setup +
-  ggplot2::theme(legend.position = "none") #"bottom
+  ggplot2::theme(legend.position = "none") +
+  theme_fontsize_large
 
 
 
@@ -1815,8 +1827,8 @@ roc_curve_remaining_models <- autoplot(evalmod(mm_remaining_models), curvetype =
     y = "HR",
     color = ""
   ) +
-  theme_setup +
-  ggplot2::theme(legend.position = "none") #"bottom
+  ggplot2::theme(legend.position = "none") +
+  theme_fontsize_large
 
 
 ## -----------------------------------------------------------------------------
@@ -1964,14 +1976,16 @@ for(i in seq_along(corp_plots_list_selected)){
   
   if(i == 1){
     p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
-      ggplot2::theme(axis.text.x = element_blank(),
+      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
+                     axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
                      plot.margin = unit(c(0,0,0,0), "cm"))
   } else if(i > 1 && i < 5){
     p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
-      ggplot2::theme(axis.text.y = element_blank(),
+      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
+                     axis.text.y = element_blank(),
                      axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.ticks.y = element_blank(),
@@ -1980,12 +1994,14 @@ for(i in seq_along(corp_plots_list_selected)){
                      plot.margin = unit(c(0,0,0,0), "cm"))
   } else if(i == 5){
     p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
-      ggplot2::theme(axis.title.x = element_blank(),
+      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
+                     axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
                      plot.margin = unit(c(0,0,0,0), "cm"))
   } else {
     p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
-      ggplot2::theme(axis.text.y = element_blank(),
+      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
+                     axis.text.y = element_blank(),
                      axis.ticks.y = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
@@ -2010,7 +2026,11 @@ x.grob <- textGrob("Forecast value",
                    gp=gpar(col="black", fontsize=15))
 
 #add to plot
-reliability_diag_selected_models_plot <- grid.arrange(arrangeGrob(p_all_selected, left = y.grob, bottom = x.grob))
+reliability_diag_selected_models_plot <- grid.arrange(arrangeGrob(p_all_selected, left = y.grob, bottom = x.grob),
+                                                      top = textGrob(
+                                                        "Reliability Diagrams", 
+                                                        gp = gpar(fontsize = 18, hjust = 0.5)
+                                                      ))
 
 ## ---
 ## Remaining: 9 models
@@ -2040,32 +2060,40 @@ for(i in seq_along(corp_plots_list_remaining)){
   
   if(i == 1 || i == 4){
     p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
-      ggplot2::theme(axis.text.x = element_blank(),
+      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
+                     axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize
   } else if((i > 1 && i < 4) || (i > 4 && i < 7)){
     p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
-      ggplot2::theme(axis.text.y = element_blank(),
+      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
+                     axis.text.y = element_blank(),
                      axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.ticks.y = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize
   } else if(i == 7){
     p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
-      ggplot2::theme(axis.title.x = element_blank(),
+      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
+                     axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize
   } else {
     p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
-      ggplot2::theme(axis.text.y = element_blank(),
+      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
+                     axis.text.y = element_blank(),
                      axis.ticks.y = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize
   }
   
   
@@ -2085,10 +2113,16 @@ y_remaining.grob <- textGrob("CEP",
 x_remaining.grob <- textGrob("Forecast value", 
                    gp=gpar(col="black", fontsize=15))
 
+tg <- textGrob('       Reliability Diagrams', gp = gpar(fontsize = 22))
+sg <- textGrob('', gp = gpar(fontsize = 4))
+margin <- unit(0.5, "line")
+
 #add to plot
-reliability_diag_remaining_models_plot <- grid.arrange(arrangeGrob(p_all_remaining, left = y_remaining.grob, bottom = x_remaining.grob))
-
-
+reliability_diag_remaining_models_plot_remaining <- grid.arrange(arrangeGrob(p_all_remaining, left = y_remaining.grob, bottom = x_remaining.grob))
+reliability_diag_remaining_models_plot <- gridExtra::grid.arrange(tg, sg, reliability_diag_remaining_models_plot_remaining,
+                        heights = unit.c(grobHeight(tg) + 1.2*margin, 
+                                         grobHeight(sg) + margin, 
+                                         unit(1,"null")))
 
 ## -----------------------------------------------------------------------------
 ## Merge Murpy Diagram and ROC curve
@@ -2150,7 +2184,7 @@ murphy_roc_remaining_models_plot <- plot_grid(murphy_diagram_remaining_models + 
                                              NULL,
                                              roc_curve_remaining_models + theme(legend.position="none"),
                                              align = 'vh',
-                                             hjust = -1,
+                                             hjust = -2,
                                              nrow = 1,
                                              rel_widths = c(1, 0, 1)
 )
