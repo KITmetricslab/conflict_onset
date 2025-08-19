@@ -151,23 +151,30 @@ models_crps <- list()
 load("output/models_crps.RData")
 
 
-## -----
+
+
+
+## ------------------------------------------------------------------------------------------------------------
 ## define lower threshold for binary event of a present conflict
 ## -----
 # conflict = monthly_fatalities > fatality_thresh
 #lower_fatalitiy_thresh = 0
 lower_fatalitiy_thresh = 24
-
-
+## ------------------------------------------------------------------------------------------------------------
 
 # compute empirical probabilities for the binary onset event
 models_predictive_probabilities <- lapply(predictive_samples, function(pred_sample) {
   pred_sample %>%
-    mutate("predicted_conflict" = outcome > lower_fatalitiy_thresh) %>%
+    mutate("predicted_conflict" = outcome > 0) %>%   #lower_fatalitiy_thresh
     group_by(country_id, month_id) %>%
     summarise(predictive_probability = mean(predicted_conflict),
               predictive_probability_log_nplustwo = (sum(predicted_conflict)+1)/(length(outcome)+2))
 })
+
+
+
+
+
 
 
 # merge models_predictive_probabilities and models_crps into new list "models_scoring_rules"
@@ -189,7 +196,7 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
 })
 
 
-
+####!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ## -----
 # compute Brier score on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
 ## -----
@@ -217,6 +224,9 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
                              (1 - actual_conflict) * log(1 - onset_prob_pred_nplustwo))
     )
 })
+######!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
 
 
 
@@ -435,27 +445,6 @@ prev_peace_prob_month_long_binary_actual <- prev_peace_prob_month_long %>%
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ################################################################################
 ## PLOTS
 ################################################################################
@@ -567,6 +556,10 @@ theme_fontsize_large <- ggplot2::theme(
   legend.text = element_text(size = 16),
 )
 
+# margin and subtitle for grid plots
+sg <- textGrob('', gp = gpar(fontsize = 4))
+margin <- unit(0.5, "line")
+
 
 ## -----------------------------------------------------------------------------
 ## Number of total fatalities worldwide per month, stacked bar plot
@@ -628,16 +621,20 @@ fatalities_worldwide_y_range <- fatalities_worldwide_plot_data %>%
     total_fatalities = sum(n_fatalities)
   )
 max(fatalities_worldwide_y_range$total_fatalities)
-#####
+
+
 
 fatalities_worldwide_plot <- ggplot(fatalities_worldwide_plot_data, aes(fill=country_category, y=n_fatalities, x=month_id)) + 
   geom_bar(position="stack", stat="identity") +
   scale_fill_manual(
     values = c("Ukraine" = "#E69F00", "Yemen" = "#0072B2",
                "Afghanistan"="#D55E00","Syria" = "#51103C",
-               "Ethiopia" = "grey30", "others" = "#009E73")
+               "Ethiopia" = "#009E73", "others" = "grey30"),
+    breaks = c("Ethiopia", "Ukraine", "Afghanistan", "Yemen", "Syria", "others"), 
+    ##
+    labels = c("Ethiopia", "Ukraine", "Afghanistan", "Yemen", "Syria", "Others")
   ) +
-  labs(title = "Aggregated Fatalities for Top 5 Countries and All Others",
+  labs(title = "Aggregated Conflict Fatalities by Month and Country",
        x = "Month") + 
   scale_y_continuous(
     "Fatalities",
@@ -693,10 +690,9 @@ greater_zero_fatalities_plot_data <- observations_18_23 %>%
     n_countries = n_distinct(country_id),
     .groups     = "drop"
   )
-#####
 
 greater_zero_fatalities_plot <- ggplot(greater_zero_fatalities_plot_data, aes(y = n_countries, x = month_id)) +
-  geom_bar(position="stack", stat="identity",fill  = "orange3", alpha = 0.7, width = 0.7, color = "black") +
+  geom_bar(position="stack", stat="identity",fill  = "#5C4033", alpha = 0.7, width = 1, color = "black") +
   labs(title = "Countries Experiencing Conflict Fatalities by Month",
        x = "Month") + 
   scale_x_continuous(
@@ -739,10 +735,10 @@ onsets_per_month_plot_data <- conflict_situations %>%
     n_onset = sum(situation_month == "onset", na.rm = TRUE),
     .groups  = "drop"
   )
-#####
+
 
 onsets_per_month_plot <- ggplot(onsets_per_month_plot_data, aes(y = n_onset, x = month_id)) + 
-  geom_bar(position="stack", stat="identity",fill  = "orange3", alpha = 0.7, width = 0.7, color = "black") +
+  geom_bar(position="stack", stat="identity",fill  = "#5C4033", alpha = 0.7, width = 1, color = "black") +
   labs(title = "Onset Events by Month for all Countries",
        x = "Month") + 
   scale_x_continuous(
@@ -778,7 +774,7 @@ if(store_plot == TRUE){
 }
 
 ## -----------------------------------------------------------------------------
-## Maybe: CRPS per Country: highlighting 5-10 most important ones (and other) 18 - 23
+## CRPS per Country: highlighting 5-10 most important ones (and other) 18 - 23
 ## -----------------------------------------------------------------------------
 
 average_CRPSscores_over_all_models_18_23 <- prob_models_all_situation_long %>%
@@ -852,16 +848,19 @@ crps_worldwide_y_range <- crps_worldwide_plot_data %>%
     avg_crps = sum(sum_avg_crps)
   )
 # max(crps_worldwide_y_range$avg_crps)
-#####
+
 
 crps_worldwide_plot <- ggplot(crps_worldwide_plot_data, aes(fill=country_category, y=sum_avg_crps, x=month_id)) + 
   geom_bar(position="stack", stat="identity") +
   scale_fill_manual(
     values = c("Ukraine" = "#E69F00", "Yemen" = "#0072B2",
                "Afghanistan"="#D55E00","Israel" = "#51103C",
-               "Ethiopia" = "grey30", "others" = "#009E73")
+               "Ethiopia" = "#009E73", "others" = "grey30"),
+    breaks = c("Ethiopia", "Ukraine", "Afghanistan", "Yemen", "Israel", "others"), 
+    ##
+    labels = c("Ethiopia", "Ukraine", "Afghanistan", "Yemen", "Israel", "Others")
   ) +
-  labs(title = "Sum of Mean CRPS Across Models for Top 5 Countries and All Others",
+  labs(title = "Sum of Mean CRPS per Month by Country Category",
        x = "Month") + 
   scale_y_continuous(
     "Mean CRPS",
@@ -935,7 +934,7 @@ onset_event_plot <- function(data, selected_model_bool, country){
     
   }
   
-  title_string <- paste0("Estimated Onset Probabilities – ", country, " (Subset)")
+  title_string <- paste0("Estimated Probabilities – ", country)
   
   p <- ggplot(data, 
               aes(x = month_id, y = onset_prob_pred, 
@@ -962,7 +961,7 @@ onset_event_plot <- function(data, selected_model_bool, country){
     theme_minimal() +
     scale_y_continuous(
       "Predicted Onset Probability", 
-      sec.axis = sec_axis(~ . * max_onset, name = "Onset Magnitude")
+      sec.axis = sec_axis(~ . * max_onset, name = "Fatalities in Months with Actual Onset")
     ) +
     scale_x_continuous(
       breaks = seq(min(months), max(months), by = 1),
@@ -1177,7 +1176,9 @@ create_distribution_plot <- function(data, model_name){
     scale_y_sqrt() +
     
     scale_fill_manual(name="conflict situation",
-                      values=c("previous peace"="#556B2F","onset"="#df9b1b")) + 
+                      values=c("previous peace"="#4664aa","onset"="#df9b1b"),
+                      breaks = c("onset", "previous peace"),
+                      labels = c("Onset", "Peace")) + 
     theme_minimal_grid() +
     labs( 
       title = model_labels[model_name]
@@ -1281,24 +1282,32 @@ for(i in seq_along(density_greqZero_list_selected)){
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if(i > 1 && i < 5){
     p <- density_greqZero_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if(i == 5){
     p <- density_greqZero_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else {
     p <- density_greqZero_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   }
   
   
@@ -1312,12 +1321,15 @@ plots_density_greqZero_gird_modified_selected <- lapply(density_greqZero_grid_mo
 p_density_greqZero_selected <- plot_grid(plotlist = plots_density_greqZero_gird_modified_selected, nrow = 2, ncol = 4, align = "hv", scale = 0.99)
 
 
-#add to plot
-density_greqZero_selected_models_plot <- grid.arrange(arrangeGrob(p_density_greqZero_selected, 
-                                                                  left = y_density.grob, 
-                                                                  bottom = x_density.grob))
+tg_greqZero_selected <- textGrob('       Distribution of Predicted Probabilities Conditional on Previous Peace', gp = gpar(fontsize = 18))
 
-density_greqZero_selected_models_plot
+density_greqZero_selected_models_plot_grid <- grid.arrange(arrangeGrob(p_density_greqZero_selected, 
+                                                                       left = y_density.grob, 
+                                                                       bottom = x_density.grob))
+density_greqZero_selected_models_plot <- gridExtra::grid.arrange(tg_greqZero_selected, sg, density_greqZero_selected_models_plot_grid,
+                                                                  heights = unit.c(grobHeight(tg_greqZero_selected) + 1.2*margin, 
+                                                                                   grobHeight(sg) + margin, 
+                                                                                   unit(1,"null")))
 
 
 if(store_plot == TRUE){
@@ -1367,24 +1379,32 @@ for(i in seq_along(density_greqZero_list_remaining)){
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if((i > 1 && i < 4) || (i > 4 && i < 7)){
     p <- density_greqZero_grid_modified_list_remaining[[model]]$plot + 
       ggplot2::theme(axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if(i == 7){
     p <- density_greqZero_grid_modified_list_remaining[[model]]$plot + 
       ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else {
     p <- density_greqZero_grid_modified_list_remaining[[model]]$plot + 
       ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   }
   
   
@@ -1398,12 +1418,16 @@ plots_density_greqZero_gird_modified_remaining <- lapply(density_greqZero_grid_m
 # Kombiniere in einem 2x4 Layout
 p_density_greqZero_remaining <- plot_grid(plotlist = plots_density_greqZero_gird_modified_remaining, nrow = 3, ncol = 3, align = "hv", scale = 0.99)
 
-#add to plot
-density_greqZero_remaining_models_plot <- grid.arrange(arrangeGrob(p_density_greqZero_remaining, 
-                                                                    left = y_density.grob, 
-                                                                    bottom = x_density.grob))
 
-density_greqZero_remaining_models_plot
+tg_greqZero_remaining <- textGrob('       Distribution of Predicted Probabilities Conditional on Previous Peace', gp = gpar(fontsize = 18))
+
+density_greqZero_remaining_models_plot_grid <- grid.arrange(arrangeGrob(p_density_greqZero_remaining, 
+                                                                   left = y_density.grob, 
+                                                                   bottom = x_density.grob))
+density_greqZero_remaining_models_plot <- gridExtra::grid.arrange(tg_greqZero_remaining, sg, density_greqZero_remaining_models_plot_grid,
+                                                                 heights = unit.c(grobHeight(tg_greqZero_remaining) + 1.2*margin, 
+                                                                                  grobHeight(sg) + margin, 
+                                                                                  unit(1,"null")))
 
 if(store_plot == TRUE){
   if(lower_fatalitiy_thresh == 0){
@@ -1458,24 +1482,32 @@ for(i in seq_along(density_greatZero_list_selected)){
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if(i > 1 && i < 5){
     p <- density_greatZero_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if(i == 5){
     p <- density_greatZero_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else {
     p <- density_greatZero_grid_modified_list_selected[[model]]$plot + 
       ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   }
   
   
@@ -1495,12 +1527,16 @@ y_density_greatZero_.grob <- textGrob("Density",
 x_density_greatZero_.grob <- textGrob("Forecast value", 
                                       gp=gpar(col="black", fontsize=15))
 
-#add to plot
-density_greatZero_selected_models_plot <- grid.arrange(arrangeGrob(p_density_greatZero_selected, 
-                                                                   left = y_density.grob, 
-                                                                   bottom = x_density.grob))
 
-density_greatZero_selected_models_plot
+tg_greatZero_selected <- textGrob('       Distribution of Predicted Probabilities Conditional on Previous Peace - Only Probabilities > 0', gp = gpar(fontsize = 18))
+
+density_greatZero_selected_models_plot_grid <- grid.arrange(arrangeGrob(p_density_greatZero_selected, 
+                                                                         left = y_density.grob, 
+                                                                         bottom = x_density.grob))
+density_greatZero_selected_models_plot <- gridExtra::grid.arrange(tg_greatZero_selected, sg, density_greatZero_selected_models_plot_grid,
+                                                                   heights = unit.c(grobHeight(tg_greatZero_selected) + 1.2*margin, 
+                                                                                    grobHeight(sg) + margin, 
+                                                                                    unit(1,"null")))
 
 if(store_plot == TRUE){
   if(lower_fatalitiy_thresh == 0){
@@ -1548,24 +1584,32 @@ for(i in seq_along(density_greatZero_list_remaining)){
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if((i > 1 && i < 4) || (i > 4 && i < 7)){
     p <- density_greatZero_grid_modified_list_remaining[[model]]$plot + 
       ggplot2::theme(axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if(i == 7){
     p <- density_greatZero_grid_modified_list_remaining[[model]]$plot + 
       ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else {
     p <- density_greatZero_grid_modified_list_remaining[[model]]$plot + 
       ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   }
   
   
@@ -1579,12 +1623,18 @@ plots_density_greatZero_gird_modified_remaining <- lapply(density_greatZero_grid
 # Kombiniere in einem 2x4 Layout
 p_density_greatZero_remaining <- plot_grid(plotlist = plots_density_greatZero_gird_modified_remaining, nrow = 3, ncol = 3, align = "hv", scale = 0.99)
 
-#add to plot
-density_greatZero_remaining_models_plot <- grid.arrange(arrangeGrob(p_density_greatZero_remaining, 
-                                                                   left = y_density.grob, 
-                                                                   bottom = x_density.grob))
 
-density_greatZero_remaining_models_plot
+# title and margin for grid plot
+tg_greatZero_remaining <- textGrob('       Distribution of Predicted Probabilities Conditional on Previous Peace - Only Probabilities > 0', gp = gpar(fontsize = 18))
+
+density_greatZero_remaining_models_plot_grid <- grid.arrange(arrangeGrob(p_density_greatZero_remaining, 
+                                                                         left = y_density.grob, 
+                                                                         bottom = x_density.grob))
+density_greatZero_remaining_models_plot <- gridExtra::grid.arrange(tg_greatZero_remaining, sg, density_greatZero_remaining_models_plot_grid,
+                                                                 heights = unit.c(grobHeight(tg_greatZero_remaining) + 1.2*margin, 
+                                                                                  grobHeight(sg) + margin, 
+                                                                                  unit(1,"null")))
+
 
 if(store_plot == TRUE){
   if(lower_fatalitiy_thresh == 0){
@@ -1945,6 +1995,8 @@ create_reliability_diag <- function(data, forecast_model) {
   
 }
 
+# title for grid plot
+tg <- textGrob('       Reliability Diagrams', gp = gpar(fontsize = 22))
 
 
 
@@ -1976,36 +2028,40 @@ for(i in seq_along(corp_plots_list_selected)){
   
   if(i == 1){
     p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
-      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
-                     axis.text.x = element_blank(),
+      ggplot2::theme(axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if(i > 1 && i < 5){
     p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
-      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
-                     axis.text.y = element_blank(),
+      ggplot2::theme(axis.text.y = element_blank(),
                      axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.ticks.y = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if(i == 5){
     p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
-      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
-                     axis.title.x = element_blank(),
+      ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else {
     p <- corp_plots_grid_modified_list_selected[[model]]$plot + 
-      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
-                     axis.text.y = element_blank(),
+      ggplot2::theme(axis.text.y = element_blank(),
                      axis.ticks.y = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
-                     plot.margin = unit(c(0,0,0,0), "cm"))
+                     plot.margin = unit(c(0,0,0,0), "cm")) +
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   }
   
   
@@ -2026,11 +2082,12 @@ x.grob <- textGrob("Forecast value",
                    gp=gpar(col="black", fontsize=15))
 
 #add to plot
-reliability_diag_selected_models_plot <- grid.arrange(arrangeGrob(p_all_selected, left = y.grob, bottom = x.grob),
-                                                      top = textGrob(
-                                                        "Reliability Diagrams", 
-                                                        gp = gpar(fontsize = 18, hjust = 0.5)
-                                                      ))
+reliability_diag_selected_models_plot_selected <- grid.arrange(arrangeGrob(p_all_selected, left = y.grob, bottom = x.grob))
+reliability_diag_selected_models_plot <- gridExtra::grid.arrange(tg, sg, reliability_diag_selected_models_plot_selected,
+                                                                  heights = unit.c(grobHeight(tg) + 1.2*margin, 
+                                                                                   grobHeight(sg) + margin, 
+                                                                                   unit(1,"null")))
+
 
 ## ---
 ## Remaining: 9 models
@@ -2060,40 +2117,40 @@ for(i in seq_along(corp_plots_list_remaining)){
   
   if(i == 1 || i == 4){
     p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
-      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
-                     axis.text.x = element_blank(),
+      ggplot2::theme(axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
                      plot.margin = unit(c(0,0,0,0), "cm")) +
-      theme_fontsize
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if((i > 1 && i < 4) || (i > 4 && i < 7)){
     p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
-      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
-                     axis.text.y = element_blank(),
+      ggplot2::theme(axis.text.y = element_blank(),
                      axis.text.x = element_blank(),
                      axis.ticks.x = element_blank(),
                      axis.ticks.y = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
                      plot.margin = unit(c(0,0,0,0), "cm")) +
-      theme_fontsize
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else if(i == 7){
     p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
-      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
-                     axis.title.x = element_blank(),
+      ggplot2::theme(axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
                      plot.margin = unit(c(0,0,0,0), "cm")) +
-      theme_fontsize
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   } else {
     p <- corp_plots_grid_modified_list_remaining[[model]]$plot + 
-      ggplot2::theme(plot.title = element_text(size = 16, hjust = 0.5),
-                     axis.text.y = element_blank(),
+      ggplot2::theme(axis.text.y = element_blank(),
                      axis.ticks.y = element_blank(),
                      axis.title.x = element_blank(),
                      axis.title.y = element_blank(),
                      plot.margin = unit(c(0,0,0,0), "cm")) +
-      theme_fontsize
+      theme_fontsize +
+      ggplot2::theme(plot.title = element_text(size = 14, hjust = 0.5))
   }
   
   
@@ -2113,9 +2170,7 @@ y_remaining.grob <- textGrob("CEP",
 x_remaining.grob <- textGrob("Forecast value", 
                    gp=gpar(col="black", fontsize=15))
 
-tg <- textGrob('       Reliability Diagrams', gp = gpar(fontsize = 22))
-sg <- textGrob('', gp = gpar(fontsize = 4))
-margin <- unit(0.5, "line")
+
 
 #add to plot
 reliability_diag_remaining_models_plot_remaining <- grid.arrange(arrangeGrob(p_all_remaining, left = y_remaining.grob, bottom = x_remaining.grob))
@@ -2170,7 +2225,7 @@ murphy_roc_selected_models_plot <- plot_grid(murphy_diagram_selected_models + th
                                              NULL,
                   roc_curve_selected_models + theme(legend.position="none"),
                   align = 'vh',
-                  hjust = -1,
+                  hjust = -2,
                   nrow = 1,
                   rel_widths = c(1, 0, 1)
 )
@@ -2208,11 +2263,11 @@ new_triptych_selected <- grid.arrange(
 if(store_plot == TRUE){
   if(lower_fatalitiy_thresh == 0){
     ggsave("plots_fatalities_greq1/tryptich_selected_models.png",
-           plot = new_triptych_selected, width = 1.5 * 2100, height = 1.5 * 2200, dpi = 300, units = "px",
+           plot = new_triptych_selected, width = 1.5 * 2100, height = 1.6 * 2200, dpi = 300, units = "px",
            bg="white")
   } else {
     ggsave("plots_fatalities_greq25/tryptich_selected_models.png",
-           plot = new_triptych_selected, width = 1.5 * 2100, height = 1.5 * 2200, dpi = 300, units = "px",
+           plot = new_triptych_selected, width = 1.5 * 2100, height = 1.6 * 2200, dpi = 300, units = "px",
            bg="white")
   }
 }
@@ -2231,11 +2286,11 @@ new_triptych_remaining <- grid.arrange(
 if(store_plot == TRUE){
   if(lower_fatalitiy_thresh == 0){
     ggsave("plots_fatalities_greq1/tryptich_remaining_models_1.png",
-           plot = new_triptych_remaining, width = 1.4 * 1875, height = 1.4 * 2890.6, dpi = 300, units = "px",
+           plot = new_triptych_remaining, width = 1.28 * 1875, height = 1.29 * 2900, dpi = 300, units = "px",
            bg="white")
   } else {
     ggsave("plots_fatalities_greq25/tryptich_remaining_models_25.png",
-           plot = new_triptych_remaining, width = 1.4 * 1875, height = 1.4 * 2890.6, dpi = 300, units = "px",
+           plot = new_triptych_remaining, width = 1.28 * 1875, height = 1.29 * 2900, dpi = 300, units = "px",
            bg="white")
   }
 }
@@ -2365,7 +2420,6 @@ brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_
     )
   )
 
-
 brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_selected, aes(x = class_group, y = value, fill = component)) +
   geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot_selected$wdth) +
   facet_grid(model ~ ., switch = "y") +
@@ -2373,27 +2427,27 @@ brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_s
   scale_fill_manual(
     values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
     ##
-    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
+    breaks = c("UNC", "MCB", "DSC", "MeanScore"),
+    ##
+    labels = c("UNC", "MCB", "DSC", "Mean Brier Score"), 
     ##
     name = ""
   ) +
   labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.05)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.025)) +
+  theme_fontsize +
   theme(
     panel.spacing = unit(0, "points"),
     strip.background = element_blank(),
     strip.placement = "outside",
-    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 18),
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 14),
+    legend.position = "bottom",
     axis.text.y = element_blank(),
     axis.ticks.length.y = unit(0, "points"),
     axis.ticks.x = element_blank(),
     axis.title = element_blank(),
-    legend.position = "bottom",
     panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
-    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-    legend.title = ggplot2::element_text(size = 15),
-    legend.text = ggplot2::element_text(size = 14),
     axis.line.x = element_blank(),
     axis.line.y = element_blank(),
     axis.text.x = ggplot2::element_text(size = 14)
@@ -2509,7 +2563,6 @@ brier_score_decomposition_barplot_all <- brier_score_decomposition_barplot_all %
     )
   )
 
-
 brier_score_decomposition_all <- ggplot(brier_score_decomposition_barplot_all, aes(x = class_group, y = value, fill = component)) +
   geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot_all$wdth) +
   facet_grid(model ~ ., switch = "y") +
@@ -2517,27 +2570,27 @@ brier_score_decomposition_all <- ggplot(brier_score_decomposition_barplot_all, a
   scale_fill_manual(
     values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
     ##
-    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
+    breaks = c("UNC", "MCB", "DSC", "MeanScore"),
+    ##
+    labels = c("UNC", "MCB", "DSC", "Mean Brier Score"),  
     ##
     name = ""
   ) +
   labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.1)) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.025)) +
+  theme_fontsize +
   theme(
     panel.spacing = unit(0, "points"),
     strip.background = element_blank(),
     strip.placement = "outside",
-    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 15),
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 14),
+    legend.position = "bottom",
     axis.text.y = element_blank(),
     axis.ticks.length.y = unit(0, "points"),
     axis.ticks.x = element_blank(),
     axis.title = element_blank(),
-    legend.position = "bottom",
     panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
-    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-    legend.title = ggplot2::element_text(size = 15),
-    legend.text = ggplot2::element_text(size = 14),
     axis.line.x = element_blank(),
     axis.line.y = element_blank(),
     axis.text.x = ggplot2::element_text(size = 14)
@@ -2691,25 +2744,25 @@ log_score_decomposition_selected <- ggplot(log_score_decomposition_barplot_selec
     ##
     breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
     ##
+    labels = c("UNC", "MCB", "DSC", "Mean Log Score"), 
+    ##
     name = ""
   ) +
-  labs(title = "MSC-DSC Mean log Score Decomposition") + 
+  labs(title = "MSC-DSC Mean Log Score Decomposition") + 
   theme_classic() +
   scale_y_continuous(breaks = seq(0, 1, by = 0.05)) +
+  theme_fontsize +
   theme(
     panel.spacing = unit(0, "points"),
     strip.background = element_blank(),
     strip.placement = "outside",
-    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 18),
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 14),
+    legend.position = "bottom",
     axis.text.y = element_blank(),
     axis.ticks.length.y = unit(0, "points"),
     axis.ticks.x = element_blank(),
     axis.title = element_blank(),
-    legend.position = "bottom",
     panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
-    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-    legend.title = ggplot2::element_text(size = 15),
-    legend.text = ggplot2::element_text(size = 14),
     axis.line.x = element_blank(),
     axis.line.y = element_blank(),
     axis.text.x = ggplot2::element_text(size = 14)
@@ -2835,27 +2888,27 @@ log_score_decomposition_all <- ggplot(log_score_decomposition_barplot_all, aes(x
   scale_fill_manual(
     values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
     ##
-    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
+    breaks = c("UNC", "MCB", "DSC", "MeanScore"),  
+    ##
+    labels = c("UNC", "MCB", "DSC", "Mean Log Score"), 
     ##
     name = ""
   ) +
-  labs(title = "MSC-DSC Mean log Score Decomposition") + 
+  labs(title = "MSC-DSC Mean Log Score Decomposition") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 6, by = 0.5)) +
+  scale_y_continuous(breaks = seq(0, 6, by = 0.1)) +
+  theme_fontsize +
   theme(
     panel.spacing = unit(0, "points"),
     strip.background = element_blank(),
     strip.placement = "outside",
-    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 15),
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 14),
+    legend.position = "bottom",
     axis.text.y = element_blank(),
     axis.ticks.length.y = unit(0, "points"),
     axis.ticks.x = element_blank(),
     axis.title = element_blank(),
-    legend.position = "bottom",
     panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
-    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-    legend.title = ggplot2::element_text(size = 15),
-    legend.text = ggplot2::element_text(size = 14),
     axis.line.x = element_blank(),
     axis.line.y = element_blank(),
     axis.text.x = ggplot2::element_text(size = 14)
