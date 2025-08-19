@@ -158,14 +158,14 @@ load("output/models_crps.RData")
 ## define lower threshold for binary event of a present conflict
 ## -----
 # conflict = monthly_fatalities > fatality_thresh
-#lower_fatalitiy_thresh = 0
-lower_fatalitiy_thresh = 24
+lower_fatalitiy_thresh = 0
+#lower_fatalitiy_thresh = 24
 ## ------------------------------------------------------------------------------------------------------------
 
 # compute empirical probabilities for the binary onset event
 models_predictive_probabilities <- lapply(predictive_samples, function(pred_sample) {
   pred_sample %>%
-    mutate("predicted_conflict" = outcome > 0) %>%   #lower_fatalitiy_thresh
+    mutate("predicted_conflict" = outcome > lower_fatalitiy_thresh) %>%
     group_by(country_id, month_id) %>%
     summarise(predictive_probability = mean(predicted_conflict),
               predictive_probability_log_nplustwo = (sum(predicted_conflict)+1)/(length(outcome)+2))
@@ -196,7 +196,6 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
 })
 
 
-####!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ## -----
 # compute Brier score on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
 ## -----
@@ -224,7 +223,7 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
                              (1 - actual_conflict) * log(1 - onset_prob_pred_nplustwo))
     )
 })
-######!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 
 
 
@@ -2420,6 +2419,14 @@ brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_
     )
   )
 
+y_breaks_brier_score_decomposition_selected <- NA
+
+if(lower_fatalitiy_thresh == 0){
+  y_breaks_brier_score_decomposition_selected <- scale_y_continuous(breaks = seq(0, 0.19, by = 0.025))
+} else {
+  y_breaks_brier_score_decomposition_selected <- scale_y_continuous(breaks = seq(0, 1, by = 0.025))
+}
+
 brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_selected, aes(x = class_group, y = value, fill = component)) +
   geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot_selected$wdth) +
   facet_grid(model ~ ., switch = "y") +
@@ -2435,7 +2442,7 @@ brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_s
   ) +
   labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.025)) +
+  y_breaks_brier_score_decomposition_selected +
   theme_fontsize +
   theme(
     panel.spacing = unit(0, "points"),
@@ -2563,6 +2570,15 @@ brier_score_decomposition_barplot_all <- brier_score_decomposition_barplot_all %
     )
   )
 
+y_breaks_brier_score_decomposition_all <- NA
+
+if(lower_fatalitiy_thresh == 0){
+  y_breaks_brier_score_decomposition_all <- scale_y_continuous(breaks = seq(0, 1, by = 0.1))
+} else {
+  y_breaks_brier_score_decomposition_all <- scale_y_continuous(breaks = seq(0, 1, by = 0.025))
+}
+
+
 brier_score_decomposition_all <- ggplot(brier_score_decomposition_barplot_all, aes(x = class_group, y = value, fill = component)) +
   geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot_all$wdth) +
   facet_grid(model ~ ., switch = "y") +
@@ -2578,7 +2594,7 @@ brier_score_decomposition_all <- ggplot(brier_score_decomposition_barplot_all, a
   ) +
   labs(title = "MSC-DSC Mean Brier Score Decomposition") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.025)) +
+  y_breaks_brier_score_decomposition_all +
   theme_fontsize +
   theme(
     panel.spacing = unit(0, "points"),
@@ -2734,6 +2750,13 @@ log_score_decomposition_barplot_selected <- log_score_decomposition_barplot_sele
     )
   )
 
+y_breaks_log_score_decomposition_selected <- NA
+
+if(lower_fatalitiy_thresh == 0){
+  y_breaks_log_score_decomposition_selected <- scale_y_continuous(breaks = seq(0, 1.25, by = 0.1))
+} else {
+  y_breaks_log_score_decomposition_selected <-scale_y_continuous(breaks = seq(0, 1, by = 0.05))
+}
 
 log_score_decomposition_selected <- ggplot(log_score_decomposition_barplot_selected, aes(x = class_group, y = value, fill = component)) +
   geom_bar(stat = "identity", position = "stack", width = log_score_decomposition_barplot_selected$wdth) +
@@ -2750,7 +2773,7 @@ log_score_decomposition_selected <- ggplot(log_score_decomposition_barplot_selec
   ) +
   labs(title = "MSC-DSC Mean Log Score Decomposition") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 1, by = 0.05)) +
+  y_breaks_log_score_decomposition_selected +
   theme_fontsize +
   theme(
     panel.spacing = unit(0, "points"),
@@ -2880,6 +2903,14 @@ log_score_decomposition_barplot_all <- log_score_decomposition_barplot_all %>%
     )
   )
 
+y_breaks_log_score_decomposition_all <- NA
+
+if(lower_fatalitiy_thresh == 0){
+  y_breaks_log_score_decomposition_all <- scale_y_continuous(breaks = seq(0, 6, by = 0.5))
+} else {
+  y_breaks_log_score_decomposition_all <-scale_y_continuous(breaks = seq(0, 6, by = 0.1))
+}
+
 
 log_score_decomposition_all <- ggplot(log_score_decomposition_barplot_all, aes(x = class_group, y = value, fill = component)) +
   geom_bar(stat = "identity", position = "stack", width = log_score_decomposition_barplot_all$wdth) +
@@ -2896,7 +2927,7 @@ log_score_decomposition_all <- ggplot(log_score_decomposition_barplot_all, aes(x
   ) +
   labs(title = "MSC-DSC Mean Log Score Decomposition") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 6, by = 0.1)) +
+  y_breaks_log_score_decomposition_all +
   theme_fontsize +
   theme(
     panel.spacing = unit(0, "points"),
