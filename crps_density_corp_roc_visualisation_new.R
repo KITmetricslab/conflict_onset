@@ -48,10 +48,10 @@ data_path <- "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/" # MacOS
 os <- Sys.info()["sysname"]
 
 # Setze den Pfad abhängig vom Betriebssystem
-data_path <- "../Data/"
-# data_path <- ifelse(os == "Windows",
-#                     "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/",  # Windows
-#                     "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/")  # macOS/Linux
+# data_path <- "../Data/"
+data_path <- ifelse(os == "Windows",
+                    "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/",  # Windows
+                    "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/")  # macOS/Linux
 
 # round predictive samples to integers or not
 round_samples <- TRUE
