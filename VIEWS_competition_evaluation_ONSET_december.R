@@ -107,7 +107,7 @@ for (m in 1:length(model_names)) {
     arrange(country_id, month_id) %>%
     filter(country_id %in% unique(observations_18_23$country_id))
   predictive_samples[[m]]$member <- rep(1:1000, nrow(observations_18_23)) # relevant because some models count samples 0:999 and others 1:1000
-
+  
   if("draw" %in% names(predictive_samples[[m]])) { # relevant for one model
     predictive_samples[[m]] <- predictive_samples[[m]] %>% select(-draw)
   }
@@ -168,8 +168,8 @@ models_crps <- lapply(models_crps, function(df) data.frame(observations_18_23[,c
 ## define lower threshold for binary event of a present conflict
 ## -----
 # conflict = monthly_fatalities > fatality_thresh
-lower_fatalitiy_thresh = 0
-#lower_fatalitiy_thresh = 24
+#lower_fatalitiy_thresh = 0
+lower_fatalitiy_thresh = 24
 ## ------------------------------------------------------------------------------------------------------------
 
 # compute empirical probabilities for the binary onset event
@@ -274,6 +274,23 @@ names(integer_crps_less_brier_data) <- rownames(model_check)[problem_model_ids]
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### CRPS -BRIER - LOG Score Plot Data Preparation -------------------------------------------------------------------------
 
 ## -----
@@ -318,6 +335,15 @@ situation_month <- ifelse(!actual_conflict$conflict & !actual_conflict$conflict_
 
 conflict_situations <- data.frame(actual_conflict[,c(2,3)], "situation_month" = as.vector(situation_month))
 # write.csv(conflict_situations, "conflict_situations.csv")
+
+
+
+
+
+
+
+
+
 
 ## -----
 ## Plot Data: CRPS values by conflict situation
@@ -399,11 +425,11 @@ prob_models_all_situation_long <- data.frame(
 
 # iterate over all models except the excluded_model in models_predictive_probabilities
 for (model_name in names(models_scoring_rules)) {
-
+  
   joined_data <- models_scoring_rules[[model_name]] %>%
     inner_join(conflict_situations, by = c("month_id", "country_id")) %>%
     mutate(model = model_name) # add model name
-
+  
   # add to dataframe
   prob_models_all_situation_long <- bind_rows(prob_models_all_situation_long, joined_data)
 }
@@ -478,7 +504,7 @@ prev_peace_prob_month_long_binary_actual <- prev_peace_prob_month_long %>%
 ## -----
 ## save plots in folders
 ## ----
-store_plot <- TRUE
+store_plot <- FALSE
 
 ## -----
 ## labels, colors, textsize etc.
@@ -502,7 +528,7 @@ model_labels <- c(
   "bodentien_rueter_negbin"      = "BR NB",
   "P_GLMM"                       = "BDT P GLMM",
   "TW_GLMM"                      = "BDT TW GLMM"
-
+  
 )
 
 model_labels_df <- data.frame("name_original" = names(model_labels), "name_paper" = model_labels)
@@ -898,10 +924,10 @@ crps_selected_models_prev_peace <- crps_month %>% filter(Model %in% selected_mod
   mutate(Model_name = Model)
 
 model_order <- unlist(crps_selected_models_prev_peace %>%
-  group_by(Model) %>%
-  summarise(total_crps = sum(CRPS), .groups = "drop") %>%
-  arrange(total_crps) %>%
-  select(Model))
+                        group_by(Model) %>%
+                        summarise(total_crps = sum(CRPS), .groups = "drop") %>%
+                        arrange(total_crps) %>%
+                        select(Model))
 
 model_order <- rev(model_order)
 
@@ -1235,26 +1261,26 @@ names(selected_colors) <- selected_models
 # Function: Reliability Diagram
 # -------------------------------------------------------------------
 create_reliability_diag <- function(data, forecast_model) {
-
+  
   # subset for selected model
   reliability_data_selected <- data %>%
     dplyr::filter(model == forecast_model)
-
+  
   # compute reliability diagram
   r_selected <- reliabilitydiag(
     x = reliability_data_selected$onset_prob_pred,
     y = reliability_data_selected$actual
   )
-
+  
   # base plot
   reliability_plot <- autoplot(r_selected)
-
+  
   # strip out unwanted geom_segment layers
   is_seg <- sapply(reliability_plot$layers, function(layer) {
     inherits(layer$geom, "GeomSegment")
   })
   reliability_plot$layers <- reliability_plot$layers[!is_seg]
-
+  
   # CEP estimates
   data_estim <- estimates(
     reliability(
@@ -1264,7 +1290,7 @@ create_reliability_diag <- function(data, forecast_model) {
   ) %>%
     dplyr::distinct() %>%
     dplyr::arrange(CEP)   # ensure order
-
+  
   # build horizontal segment df
   df_segments <- data.frame()
   if (nrow(data_estim) > 1) {
@@ -1282,10 +1308,10 @@ create_reliability_diag <- function(data, forecast_model) {
       }
     }
   }
-
+  
   # color for this model
   path_color <- selected_colors[forecast_model]
-
+  
   # final plot
   p <- reliability_plot +
     ggplot2::labs(
@@ -1306,7 +1332,7 @@ create_reliability_diag <- function(data, forecast_model) {
       linewidth = 1,
       colour = path_color
     )
-
+  
   # add flat horizontal segments if present
   if (nrow(df_segments) > 0) {
     p <- p + ggplot2::geom_segment(
@@ -1328,7 +1354,7 @@ create_reliability_diag <- function(data, forecast_model) {
       size = 2
     )
   }
-
+  
   return(p)
 }
 
@@ -1354,7 +1380,7 @@ grid.arrange(
 )
 
 if (store_plot == TRUE) {
-
+  
   # build the arranged plot as a grob
   reliability_grid <- gridExtra::arrangeGrob(
     tg,
@@ -1362,7 +1388,7 @@ if (store_plot == TRUE) {
     ncol = 1,
     heights = c(0.1, 1)
   )
-
+  
   if (lower_fatalitiy_thresh == 0) {
     ggsave(
       "plots_fatalities_greq1/reliability_diagram_selected_models_1.png",

@@ -70,10 +70,68 @@ ucdp_ged_event_data <- ucdp_ged_event_data %>%
 ucdp_ged_multiple_month_event_data <- ucdp_ged_event_data %>%
   filter(event_months > 1,
          as.Date(date_start) >= as.Date("2018-01-01 00:00:00.000"),
-         as.Date(date_end) <= as.Date("2023-12-31 00:00:00.000"),
-         best > 25)
+         as.Date(date_end) <= as.Date("2023-12-31 00:00:00.000"))
   
 
 
 #length(unique(ucdp_ged_multiple_month_event_data$country))
+
+
+
+test_set_december_event_great1month_data <- ucdp_ged_event_data %>%
+  filter(event_months > 1,
+         as.Date(date_start) >= as.Date("2018-01-01 00:00:00.000"),
+         as.Date(date_end) <= as.Date("2023-12-31 00:00:00.000"))
+
+
+test_set_december_event_great1month_data <- test_set_december_event_great1month_data %>%
+  filter(month(as.Date(date_end)) == 12)
+
+
+
+test_set_december_event_great1month_data <- test_set_december_event_great1month_data %>%
+  mutate(year = year(as.Date(date_end)),
+         month = month(as.Date(date_end))) %>%
+    group_by(country, year, month) %>%
+    summarise(outcome_great1month = sum(best, na.rm = TRUE))
+
+
+
+
+
+
+
+
+
+
+
+
+#### single month
+
+ucdp_ged_single_month_event_data <- ucdp_ged_event_data %>%
+  filter(event_months == 1,
+         as.Date(date_start) >= as.Date("2018-01-01 00:00:00.000"),
+         as.Date(date_end) <= as.Date("2023-12-31 00:00:00.000"))
+
+test_set_december_event_singlemonth_data <- ucdp_ged_single_month_event_data %>%
+  filter(month(as.Date(date_end)) == 12)
+
+
+
+test_set_december_event_singlemonth_data <- test_set_december_event_singlemonth_data %>%
+  mutate(year = year(as.Date(date_end)),
+         month = month(as.Date(date_end))) %>%
+  group_by(country, year, month) %>%
+  summarise(outcome_1month = sum(best, na.rm = TRUE))
+
+
+
+
+## combine dataset
+test_set_december_event_great1month_data_common <- test_set_december_event_great1month_data %>%
+  inner_join(test_set_december_event_singlemonth_data, by = c("country", "year", "month")) %>%
+  mutate(
+    flag_true = (outcome_1month + outcome_great2month > 24) & (outcome_1month < 25),
+    sum_outcomes = outcome_great2month + outcome_1month
+  )
   
