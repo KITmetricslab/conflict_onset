@@ -97,9 +97,11 @@ subfolder_names <- c(18, 19, 20, 21, 22, 23)
 predictive_samples <- list()
 
 for (m in 1:length(model_names)) {
-  model_files <- paste0("../Data/", "all_available_cm_predictions/", model_names[m], "/cm/window=Y20", subfolder_names, "/", model_names[m], appendix_names, ".parquet")
+  #model_files <- paste0("../Data/", "all_available_cm_predictions/", model_names[m], "/cm/window=Y20", subfolder_names, "/", model_names[m], appendix_names, ".parquet")
+  
   print(m)
   # model_files <- paste0(data_path, "all_available_cm_predictions/", model_names[m], "/cm/window=Y20", subfolder_names, "/", model_names[m], appendix_names, ".parquet")
+  model_files <- paste0(data_path, "all_available_cm_predictions/", model_names[m], "/cm/window=Y20", subfolder_names, "/", model_names[m], appendix_names, ".parquet")
   predictive_samples[[m]] <- lapply(model_files, arrow::read_parquet)
   predictive_samples[[m]] <- bind_rows(predictive_samples[[m]]) %>%
     arrange(country_id, month_id) %>%
