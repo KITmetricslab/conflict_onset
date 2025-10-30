@@ -131,7 +131,7 @@ test_set_december_event_singlemonth_data <- test_set_december_event_singlemonth_
 test_set_december_event_great1month_data_common <- test_set_december_event_great1month_data %>%
   inner_join(test_set_december_event_singlemonth_data, by = c("country", "year", "month")) %>%
   mutate(
-    flag_true = (outcome_1month + outcome_great2month > 24) & (outcome_1month < 25),
-    sum_outcomes = outcome_great2month + outcome_1month
+    flag_true = (outcome_1month + outcome_great1month > 24) & (outcome_1month < 25),
+    sum_outcomes = outcome_great1month + outcome_1month
   )
   
