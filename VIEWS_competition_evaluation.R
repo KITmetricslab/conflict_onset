@@ -13,6 +13,23 @@ setwd(dirname(current_path))
 # visualisation of the predictions from the VIEWS competition of the years 2018-2023
 #### -------------------------------------------------------------------------------
 
+
+
+
+
+
+
+
+
+
+## test if I can push onto GitHub
+
+
+
+
+
+
+
 ## -------------
 # load packages
 ## -------------
@@ -40,8 +57,8 @@ library(cowplot)
 ## ---------
 
 # path to directory on "share-alle"
-# data_path <- "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/"
-data_path <- "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/" # MacOS version
+ data_path <- "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/" # Windows version
+#data_path <- "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/" # MacOS version
 
 
 # Erkenne das Betriebssystem
