@@ -13,23 +13,6 @@ setwd(dirname(current_path))
 # visualisation of the predictions from the VIEWS competition of the years 2018-2023
 #### -------------------------------------------------------------------------------
 
-
-
-
-
-
-
-
-
-
-## test if I can push onto GitHub
-
-
-
-
-
-
-
 ## -------------
 # load packages
 ## -------------
@@ -198,6 +181,20 @@ models_predictive_probabilities <- lapply(predictive_samples, function(pred_samp
               predictive_probability_log_nplustwo = (sum(predicted_conflict)+1)/(length(outcome)+2))
 })
 
+## ADD LOGED EMPIRICAL PROBABILITES log(quantile bzw. samples)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+
+
+
 
 # merge models_predictive_probabilities and models_crps into new list "models_scoring_rules"
 models_scoring_rules <- list()
@@ -216,6 +213,26 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
                 select(country_id, month_id, actual = outcome),
               by = c("country_id", "month_id"))
 })
+
+
+## ADD LOGED OBSERVATIONS log(y+1)
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+
+
+
+
+
+
+
 
 
 ## -----
