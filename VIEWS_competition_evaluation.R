@@ -195,33 +195,6 @@ models_predictive_probabilities <- lapply(predictive_samples, function(pred_samp
               predictive_probability_log_nplustwo = (sum(predicted_conflict)+1)/(length(outcome)+2))
 })
 
-## ADD LOGED EMPIRICAL PROBABILITES log(quantile bzw. samples)
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-# compute empirical probabilities for the binary onset event
-models_predictive_probabilities_log_target <- lapply(predictive_samples, function(pred_sample) {
-  pred_sample %>%
-    mutate("predicted_conflict" = outcome > lower_fatalitiy_thresh) %>%
-    group_by(country_id, month_id) %>%
-    summarise(predictive_probability_log_target = mean(log(predicted_conflict + 1)))
-})
-
-
-
-
-
-
-
-
-
 # merge models_predictive_probabilities and models_crps into new list "models_scoring_rules"
 models_scoring_rules <- list()
 for (m in 1:n_models) {
@@ -254,17 +227,17 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
               by = c("country_id", "month_id"))
 })
 
-
-## add log(actual + 1)
-models_scoring_rules <- lapply(models_scoring_rules, function(df) {
-  df %>%
-    left_join(
-      observations_18_23 %>%
-        mutate(log_actual = log(outcome + 1)) %>%
-        select(country_id, month_id, log_actual),
-      by = c("country_id", "month_id")
-    )
-})
+# 
+# ## add log(actual + 1)
+# models_scoring_rules <- lapply(models_scoring_rules, function(df) {
+#   df %>%
+#     left_join(
+#       observations_18_23 %>%
+#         mutate(log_actual = log(outcome + 1)) %>%
+#         select(country_id, month_id, log_actual),
+#       by = c("country_id", "month_id")
+#     )
+# })
 
 
 ## -----
@@ -336,11 +309,6 @@ names(integer_crps_less_brier_data) <- rownames(model_check)[problem_model_ids]
 #
 # model_names <- names(models_scoring_rules)
 # n_models <- length(model_names)
-
-
-
-
-
 
 
 
@@ -429,8 +397,6 @@ print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),2:nc
 
 
 
-
-
 ## -----
 ## Plot Data: twCRPS values by conflict situation
 ## -----
@@ -460,9 +426,6 @@ print(colSums(models_twcrps_conflict_month[1:nrow(models_twcrps_conflict_month),
 
 
 
-
-
-
 ## -----
 ## Plot Data: Brier values by conflict situation
 ## -----
@@ -484,32 +447,6 @@ brier_month <- data.frame("Brier" = unlist(c(models_brier_conflict_month[,2:ncol
                           "Model" = rep(names(models_brier_conflict_month)[2:ncol(models_brier_conflict_month)], each = 4))
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## ---
 ## Plot-Data: log-score values by conflict situation for the onset problem (y \in {0,1})
 ## ---
@@ -523,7 +460,6 @@ models_logscore_conflict <- list(models_logscore_conflict, conflict_situations) 
 models_logscore_conflict_month <- models_logscore_conflict %>% select(!c("country_id", "month_id")) %>% group_by(situation_month) %>% summarise_all(sum)
 
 models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] <- models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] / nrow(models_logscore_conflict) # compute contributions to average CRPS
-
 
 
 
@@ -1321,90 +1257,109 @@ if(store_plot == TRUE){
   }
 }
 
+
+
+
+
+
 ## -----------------------------------------------------------------------------
-## Figure 2f: twCRPS decomposition for previous peace with Brier score
+## Figure 2f: CRPS per threshold
 ## -----------------------------------------------------------------------------
-## ---
-## Selected models
-## ---
-twcrps_selected_models_prev_peace <- twcrps_month %>% filter(Model %in% selected_models) %>%
-  filter(Situation %in% c("peace", "onset")) %>%
-  mutate(Model_name = Model)
 
-tw_model_order <- unlist(twcrps_selected_models_prev_peace %>%
-                        group_by(Model) %>%
-                        summarise(total_twcrps = sum(twCRPS), .groups = "drop") %>%
-                        arrange(total_twcrps) %>%
-                        select(Model))
 
-tw_model_order <- rev(tw_model_order)
 
-brier_selected_models_prev_peace <- brier_month %>% filter(Model %in% selected_models) %>%
-  filter(Situation %in% c("peace", "onset"))
 
-# Compute CRPS remainder
-crps_brier_selected_models_prev_peace <- merge(crps_selected_models_prev_peace, brier_selected_models_prev_peace) %>%
-  mutate("CRPS_Remainder" = CRPS-Brier)
 
-# Create CRPS remainder part
-crps_brier_plot_data_Rem <- crps_brier_selected_models_prev_peace %>%
-  mutate(Situation = paste0(Situation, "-Remainder")) %>%
-  rename(Score = CRPS_Remainder) %>%
-  select(-c("CRPS", "Brier"))
-crps_brier_plot_data_BS <- crps_brier_selected_models_prev_peace %>%
-  mutate(Situation = paste0(Situation, "-Brier")) %>%
-  rename(Score = Brier) %>%
-  select(-c("CRPS", "CRPS_Remainder"))
+m = 2
+k = 24
+brier_scores_threshold_plot_data <- models_scoring_rules[[m]] %>%
+    select(country_id, month_id,actual)
 
-crps_brier_plot_data <- rbind(crps_brier_plot_data_Rem, crps_brier_plot_data_BS) %>%
-  arrange(factor(Model, levels = tw_model_order))
 
-crps_brier_plot_data <- crps_brier_plot_data %>%
-  mutate(Model = factor(Model, levels = tw_model_order))
+predictive_probability_data <- predictive_samples[[m]] %>%
+  mutate("predicted_conflict" = outcome > lower_fatalitiy_thresh) %>%
+  group_by(country_id, month_id) %>%
+  summarise(predictive_probability = mean(predicted_conflict))
 
-# Rename models
-crps_brier_plot_data$Model <- recode(
-  crps_brier_plot_data$Model,
-  !!!model_labels
-)
 
-# Plot
-crps_brier_prev_peace_plot <- crps_brier_plot_data  %>%
-  ggplot(aes(fill = Situation, y = Model, x = Score)) +
-  geom_bar(position = "stack", stat = "identity") +
-  labs(title = "Contribution to the Mean CRPS for Previous Peace with Brier Score",
-       x = "Mean CRPS") +
-  scale_fill_manual("Situation",
-                    values = c("onset-Remainder" = "#4664aa",
-                               "peace-Remainder" = "#a2b2d4",
-                               "onset-Brier" = "#555555",
-                               "peace-Brier" = "lightgrey"),
-                    labels = c("onset-Remainder" = "Onset (CRPS remainder)",
-                               "peace-Remainder" = "Continued peace (CRPS remainder)",
-                               "onset-Brier" = "Onset (Brier score)",
-                               "peace-Brier" = "Continued peace (Brier score)")) +
-  theme_minimal() +
-  theme(
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor.x = element_blank(),
-    axis.ticks.y = element_blank(),
-    legend.title = element_blank()
-  ) +
-  theme_fontsize
+brier_scores_threshold_plot_data <- brier_scores_threshold_plot_data %>%
+  left_join(
+    predictive_probability_data %>% select(country_id, month_id, predictive_probability),
+    by = c("country_id", "month_id")
+  )
 
-crps_brier_prev_peace_plot
+brier_scores_threshold_plot_data <- brier_scores_threshold_plot_data %>%
+  mutate(
+    actual_conflict = actual > k,
+    brier_score = (actual_conflict - predictive_probability)^2
+  )
 
-if(store_plot == TRUE){
-  if(lower_fatalitiy_thresh == 0){
-    ggsave("plots_fatalities_greq1/crps_brier_prev_peace_1.png",
-           plot = crps_brier_prev_peace_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
-           bg="white")
-  } else {
-    ggsave("plots_fatalities_greq25/crps_brier_prev_peace_25.png",
-           plot = crps_brier_prev_peace_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
-           bg="white")
-  }
+mean(brier_scores_threshold_plot_data$brier_score)
+
+
+
+
+
+
+
+compute_avg_brier_score_for_threshold <- function(model_data, prediciton_data, model_iterate, fatality_threshold){
+  
+  predictive_probability_data <- prediciton_data[[model_iterate]] %>%
+    mutate("predicted_conflict" = outcome > fatality_threshold) %>%
+    group_by(country_id, month_id) %>%
+    summarise(predictive_probability = mean(predicted_conflict),
+              .groups = "drop")
+  
+  
+  brier_score_model_data <- model_data %>%
+    left_join(
+      predictive_probability_data %>% select(country_id, month_id, predictive_probability),
+      by = c("country_id", "month_id")
+    )
+  
+  brier_score_model_data <- brier_score_model_data %>%
+    mutate(
+      actual_conflict = actual > fatality_threshold,
+      brier_score = (actual_conflict - predictive_probability)^2
+    )
+  
+  return(mean(brier_score_model_data$brier_score))
 }
+
+compute_avg_brier_score_for_threshold(brier_scores_threshold_plot_data, predictive_samples, 1, fatality_threshold = 500)
+
+k_max <- 500
+
+df_avg_brier_scores_model_per_thresh <- tibble(a = numeric(), brier_avg = numeric())
+for (k in 0:k_max) {
+  
+  last_avg_brier <- compute_avg_brier_score_for_threshold(brier_scores_threshold_plot_data, 
+                                                          predictive_samples, 
+                                                          1, 
+                                                          fatality_threshold = k)
+  
+  new_row <- tibble(a = k, brier_avg = last_avg_brier)
+  
+  df_avg_brier_scores_model_per_thresh <- bind_rows(df_avg_brier_scores_model_per_thresh, new_row)
+  
+  
+  pct <- k / k_max * 100
+  cat(paste0(round(pct), "%"), "\r")
+}
+
+
+
+
+
+ggplot(data = df_avg_brier_scores_model_per_thresh, aes(x = a, y = brier_avg)) + 
+  geom_line()
+
+
+df2 <- df_avg_brier_scores_model_per_thresh %>%
+  mutate(log_a = log(a + 1))
+
+ggplot(data = df2, aes(x = log_a, y = brier_avg)) + 
+  geom_line()
 
 
 ## -----------------------------------------------------------------------------
