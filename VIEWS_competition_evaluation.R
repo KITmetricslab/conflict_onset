@@ -152,15 +152,29 @@ month_lookup_vec <- setNames(month_labels, actuals_ids)
 # compute crps on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
 ## -----
 
-models_crps <- lapply(complete_data, function(df) apply(df, 1, function(df_row) {
-  crps_sample(y = df_row[3],
-              dat = df_row[4:1003])
-}))
-
-models_crps <- lapply(models_crps, function(df) data.frame(observations_18_23[,c("country_id", "month_id")], "crps" = df))
-
+# models_crps <- lapply(complete_data, function(df) apply(df, 1, function(df_row) {
+#   crps_sample(y = df_row[3],
+#               dat = df_row[4:1003])
+# }))
+# 
+# models_crps <- lapply(models_crps, function(df) data.frame(observations_18_23[,c("country_id", "month_id")], "crps" = df))
+# 
 # save(models_crps, file = "output/models_crps.RData")
-# load("output/models_crps.RData")
+load("output/models_crps.RData")
+
+
+## -----
+# compute twcrps on benchmark models and submitted forecasts for each country-month pair for 2018 to 2023
+## -----
+# models_twcrps <- lapply(complete_data, function(df) apply(df, 1, function(df_row) {
+#   crps_sample(y = log(df_row[3] + 1),
+#               dat = log(df_row[4:1003] + 1))
+# }))
+# 
+# models_twcrps <- lapply(models_twcrps, function(df) data.frame(observations_18_23[,c("country_id", "month_id")], "twcrps" = df))
+# 
+# save(models_twcrps, file = "output/models_twcrps.RData")
+load("output/models_twcrps.RData")
 
 
 
@@ -192,6 +206,18 @@ models_predictive_probabilities <- lapply(predictive_samples, function(pred_samp
 #
 #
 #
+# compute empirical probabilities for the binary onset event
+models_predictive_probabilities_log_target <- lapply(predictive_samples, function(pred_sample) {
+  pred_sample %>%
+    mutate("predicted_conflict" = outcome > lower_fatalitiy_thresh) %>%
+    group_by(country_id, month_id) %>%
+    summarise(predictive_probability_log_target = mean(log(predicted_conflict + 1)))
+})
+
+
+
+
+
 
 
 
@@ -206,6 +232,20 @@ for (m in 1:n_models) {
 }
 names(models_scoring_rules) <- model_names
 
+# add twcrps values
+models_scoring_rules <- Map(
+  f = function(score_df, tw_df) {
+    score_df %>%
+      left_join(
+        tw_df %>% select(country_id, month_id, twcrps),
+        by = c("country_id", "month_id")
+      )
+  },
+  models_scoring_rules,
+  models_twcrps
+)
+
+
 # add the acutal observations to list
 models_scoring_rules <- lapply(models_scoring_rules, function(df) {
   df %>%
@@ -215,24 +255,16 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
 })
 
 
-## ADD LOGED OBSERVATIONS log(y+1)
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-
-
-
-
-
-
-
+## add log(actual + 1)
+models_scoring_rules <- lapply(models_scoring_rules, function(df) {
+  df %>%
+    left_join(
+      observations_18_23 %>%
+        mutate(log_actual = log(outcome + 1)) %>%
+        select(country_id, month_id, log_actual),
+      by = c("country_id", "month_id")
+    )
+})
 
 
 ## -----
@@ -243,12 +275,13 @@ models_scoring_rules <- lapply(models_scoring_rules, function(df) {
   df %>%
     mutate(
       actual_conflict = actual > lower_fatalitiy_thresh,
-      brier_onset = (actual_conflict - onset_prob_pred)^2
+      brier_onset = (actual_conflict - onset_prob_pred)^2,
+      brier_onset_log_target = (1/(lower_fatalitiy_thresh + 1)) * (actual_conflict - onset_prob_pred)^2
     )
 })
 
 # remove lists that are not longer needed
-rm(models_predictive_probabilities, models_crps)
+rm(models_predictive_probabilities, models_crps, models_twcrps)
 
 
 ## -----
@@ -303,18 +336,6 @@ names(integer_crps_less_brier_data) <- rownames(model_check)[problem_model_ids]
 #
 # model_names <- names(models_scoring_rules)
 # n_models <- length(model_names)
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -406,6 +427,42 @@ print(colSums(models_crps_conflict_month[4,2:ncol(models_crps_conflict_month)] )
 print(colSums(models_crps_conflict_month[1:nrow(models_crps_conflict_month),2:ncol(models_crps_conflict_month)] ))
 
 
+
+
+
+
+## -----
+## Plot Data: twCRPS values by conflict situation
+## -----
+models_twcrps_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "twcrps")) %>%
+  reduce(left_join, c("country_id", "month_id"))
+
+
+names(models_twcrps_conflict) <- c("country_id", "month_id", model_names)
+models_twcrps_conflict <- list(models_twcrps_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
+
+models_twcrps_conflict_month <- models_twcrps_conflict %>% select(!c("country_id", "month_id")) %>% group_by(situation_month) %>% summarise_all(sum)
+
+models_twcrps_conflict_month[,2:ncol(models_twcrps_conflict_month)] <- models_twcrps_conflict_month[,2:ncol(models_twcrps_conflict_month)] / nrow(models_twcrps_conflict) # compute contributions to average CRPS
+
+
+# create ggplot data frames
+twcrps_month <- data.frame("twCRPS" = unlist(c(models_twcrps_conflict_month[,2:ncol(models_twcrps_conflict_month)])),
+                         "Situation" = rep(models_twcrps_conflict_month$situation_month, ncol(models_twcrps_conflict_month)-1),
+                         "Model" = rep(names(models_twcrps_conflict_month)[2:ncol(models_twcrps_conflict_month)], each = 4))
+
+# print CRPS contribution of peace months
+print(colSums(models_twcrps_conflict_month[4,2:ncol(models_twcrps_conflict_month)] ))
+
+# print overall CRPS per model
+print(colSums(models_twcrps_conflict_month[1:nrow(models_twcrps_conflict_month),2:ncol(models_twcrps_conflict_month)] ))
+
+
+
+
+
+
+
 ## -----
 ## Plot Data: Brier values by conflict situation
 ## -----
@@ -416,16 +473,40 @@ models_brier_conflict <- lapply(models_scoring_rules, function(m) m %>% select("
 names(models_brier_conflict) <- c("country_id", "month_id", model_names)
 models_brier_conflict <- list(models_brier_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
 
-## -----
-# a) create ggplots of contributions to average Brier scores for all conflict situations
-## -----
 models_brier_conflict_month <- models_brier_conflict %>% select(!c("country_id", "month_id")) %>% group_by(situation_month) %>% summarise_all(sum)
 
 models_brier_conflict_month[,2:ncol(models_brier_conflict_month)] <- models_brier_conflict_month[,2:ncol(models_brier_conflict_month)] / nrow(models_brier_conflict) # compute contributions to average brier
 
+
+# create ggplot data frames
 brier_month <- data.frame("Brier" = unlist(c(models_brier_conflict_month[,2:ncol(models_brier_conflict_month)])),
                           "Situation" = rep(models_brier_conflict_month$situation_month, ncol(models_brier_conflict_month)-1),
                           "Model" = rep(names(models_brier_conflict_month)[2:ncol(models_brier_conflict_month)], each = 4))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -442,6 +523,9 @@ models_logscore_conflict <- list(models_logscore_conflict, conflict_situations) 
 models_logscore_conflict_month <- models_logscore_conflict %>% select(!c("country_id", "month_id")) %>% group_by(situation_month) %>% summarise_all(sum)
 
 models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] <- models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] / nrow(models_logscore_conflict) # compute contributions to average CRPS
+
+
+
 
 
 ## ---
@@ -1150,6 +1234,7 @@ if(store_plot == TRUE){
   }
 }
 
+
 # library(magick)
 #
 # if(store_plot == TRUE){
@@ -1174,6 +1259,153 @@ if(store_plot == TRUE){
 #     }
 #   }
 # }
+
+
+
+## -----------------------------------------------------------------------------
+## Figure 2e: twCRPS decomposition
+## -----------------------------------------------------------------------------
+## ---
+## Selected models
+## ---
+twcrps_month_selected_models <- twcrps_month %>% filter(Model %in% selected_models) %>%
+  mutate("Model_orig" = Model)
+
+# Rename models
+twcrps_month_selected_models$Model <- recode(
+  crps_month_selected_models$Model,
+  !!!model_labels
+)
+
+# plot
+library(forcats)
+
+twcrps_conflict_situation_plot <- twcrps_month_selected_models %>%
+  group_by(Model) %>%
+  summarise(total_twcrps = sum(twCRPS), .groups = "drop") %>%
+  right_join(twcrps_month_selected_models, by = "Model") %>%
+  mutate(Model = fct_reorder(Model, total_twcrps, .desc = TRUE)) %>%
+  ggplot(aes(fill = Situation, y = Model, x = twCRPS)) +
+  geom_bar(position = "stack", stat = "identity") +
+  labs(title = "Contribution to the Mean twCRPS per Conflict Situation",
+       x = "Mean twCRPS") +
+  scale_fill_manual("Situation",
+                    values = c("conflict" = "#a22223",
+                               "deescalation" = "#d09191",
+                               "onset" = "#4664aa",
+                               "peace" = "#a2b2d4"),
+                    labels = c("conflict" = "Continued conflict",
+                               "deescalation" = "End / interruption of conflict",
+                               "onset" = "Onset",
+                               "peace" = "Continued peace")) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.title = element_blank()
+  ) +
+  theme_fontsize
+
+twcrps_conflict_situation_plot
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/twcrps_conflict_situation_1.png",
+           plot = twcrps_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/twcrps_conflict_situation_25.png",
+           plot = twcrps_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
+## -----------------------------------------------------------------------------
+## Figure 2f: twCRPS decomposition for previous peace with Brier score
+## -----------------------------------------------------------------------------
+## ---
+## Selected models
+## ---
+twcrps_selected_models_prev_peace <- twcrps_month %>% filter(Model %in% selected_models) %>%
+  filter(Situation %in% c("peace", "onset")) %>%
+  mutate(Model_name = Model)
+
+tw_model_order <- unlist(twcrps_selected_models_prev_peace %>%
+                        group_by(Model) %>%
+                        summarise(total_twcrps = sum(twCRPS), .groups = "drop") %>%
+                        arrange(total_twcrps) %>%
+                        select(Model))
+
+tw_model_order <- rev(tw_model_order)
+
+brier_selected_models_prev_peace <- brier_month %>% filter(Model %in% selected_models) %>%
+  filter(Situation %in% c("peace", "onset"))
+
+# Compute CRPS remainder
+crps_brier_selected_models_prev_peace <- merge(crps_selected_models_prev_peace, brier_selected_models_prev_peace) %>%
+  mutate("CRPS_Remainder" = CRPS-Brier)
+
+# Create CRPS remainder part
+crps_brier_plot_data_Rem <- crps_brier_selected_models_prev_peace %>%
+  mutate(Situation = paste0(Situation, "-Remainder")) %>%
+  rename(Score = CRPS_Remainder) %>%
+  select(-c("CRPS", "Brier"))
+crps_brier_plot_data_BS <- crps_brier_selected_models_prev_peace %>%
+  mutate(Situation = paste0(Situation, "-Brier")) %>%
+  rename(Score = Brier) %>%
+  select(-c("CRPS", "CRPS_Remainder"))
+
+crps_brier_plot_data <- rbind(crps_brier_plot_data_Rem, crps_brier_plot_data_BS) %>%
+  arrange(factor(Model, levels = tw_model_order))
+
+crps_brier_plot_data <- crps_brier_plot_data %>%
+  mutate(Model = factor(Model, levels = tw_model_order))
+
+# Rename models
+crps_brier_plot_data$Model <- recode(
+  crps_brier_plot_data$Model,
+  !!!model_labels
+)
+
+# Plot
+crps_brier_prev_peace_plot <- crps_brier_plot_data  %>%
+  ggplot(aes(fill = Situation, y = Model, x = Score)) +
+  geom_bar(position = "stack", stat = "identity") +
+  labs(title = "Contribution to the Mean CRPS for Previous Peace with Brier Score",
+       x = "Mean CRPS") +
+  scale_fill_manual("Situation",
+                    values = c("onset-Remainder" = "#4664aa",
+                               "peace-Remainder" = "#a2b2d4",
+                               "onset-Brier" = "#555555",
+                               "peace-Brier" = "lightgrey"),
+                    labels = c("onset-Remainder" = "Onset (CRPS remainder)",
+                               "peace-Remainder" = "Continued peace (CRPS remainder)",
+                               "onset-Brier" = "Onset (Brier score)",
+                               "peace-Brier" = "Continued peace (Brier score)")) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.title = element_blank()
+  ) +
+  theme_fontsize
+
+crps_brier_prev_peace_plot
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/crps_brier_prev_peace_1.png",
+           plot = crps_brier_prev_peace_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/crps_brier_prev_peace_25.png",
+           plot = crps_brier_prev_peace_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
 
 ## -----------------------------------------------------------------------------
 ## Figure 3: ROC curves
