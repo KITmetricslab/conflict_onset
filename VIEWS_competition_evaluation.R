@@ -192,7 +192,8 @@ models_predictive_probabilities <- lapply(predictive_samples, function(pred_samp
     mutate("predicted_conflict" = outcome > lower_fatalitiy_thresh) %>%
     group_by(country_id, month_id) %>%
     summarise(predictive_probability = mean(predicted_conflict),
-              predictive_probability_log_nplustwo = (sum(predicted_conflict)+1)/(length(outcome)+2))
+              predictive_probability_log_nplustwo = (sum(predicted_conflict)+1)/(length(outcome)+2),
+              .groups = "drop")
 })
 
 # merge models_predictive_probabilities and models_crps into new list "models_scoring_rules"
@@ -1265,43 +1266,7 @@ if(store_plot == TRUE){
 ## -----------------------------------------------------------------------------
 ## Figure 2f: CRPS per threshold
 ## -----------------------------------------------------------------------------
-
-
-
-
-
-m = 2
-k = 24
-brier_scores_threshold_plot_data <- models_scoring_rules[[m]] %>%
-    select(country_id, month_id,actual)
-
-
-predictive_probability_data <- predictive_samples[[m]] %>%
-  mutate("predicted_conflict" = outcome > lower_fatalitiy_thresh) %>%
-  group_by(country_id, month_id) %>%
-  summarise(predictive_probability = mean(predicted_conflict))
-
-
-brier_scores_threshold_plot_data <- brier_scores_threshold_plot_data %>%
-  left_join(
-    predictive_probability_data %>% select(country_id, month_id, predictive_probability),
-    by = c("country_id", "month_id")
-  )
-
-brier_scores_threshold_plot_data <- brier_scores_threshold_plot_data %>%
-  mutate(
-    actual_conflict = actual > k,
-    brier_score = (actual_conflict - predictive_probability)^2
-  )
-
-mean(brier_scores_threshold_plot_data$brier_score)
-
-
-
-
-
-
-
+# function to compute the avg brier score for specific model and threshold
 compute_avg_brier_score_for_threshold <- function(model_data, prediciton_data, model_iterate, fatality_threshold){
   
   predictive_probability_data <- prediciton_data[[model_iterate]] %>%
@@ -1326,26 +1291,80 @@ compute_avg_brier_score_for_threshold <- function(model_data, prediciton_data, m
   return(mean(brier_score_model_data$brier_score))
 }
 
-compute_avg_brier_score_for_threshold(brier_scores_threshold_plot_data, predictive_samples, 1, fatality_threshold = 500)
 
-k_max <- 500
+## compute all average brier scores
+# all_models_brier <- tibble(
+#   model     = character(),
+#   a         = numeric(),
+#   brier_avg = numeric()
+# )
+# 
+# k_max <- 500
+# 
+# for (m in 1:length(models_scoring_rules)) {
+#   
+#   name_model <- names(models_scoring_rules)[m]
+#   brier_scores_threshold_data <- models_scoring_rules[[m]] %>%
+#     select(country_id, month_id,actual)
+#   
+#   for (k in 0:k_max) {
+#     
+#     last_avg_brier <- compute_avg_brier_score_for_threshold(brier_scores_threshold_data, 
+#                                                             predictive_samples, 
+#                                                             m, 
+#                                                             fatality_threshold = k)
+#     
+#     new_row <- tibble(model = name_model, a = k, brier_avg = last_avg_brier)
+#     
+#     all_models_brier <- bind_rows(all_models_brier, 
+#                                   new_row)
+#     
+#     
+#     pct <- k / k_max * 100
+#     cat("model ", m ,"/", length(models_scoring_rules),": ", paste0(round(pct), "%"), "\r")
+#   }
+# }
+# 
+# save(all_models_brier, file = "output/all_models_brier_threshold.RData")
+load("output/all_models_brier_threshold.RData")
 
-df_avg_brier_scores_model_per_thresh <- tibble(a = numeric(), brier_avg = numeric())
-for (k in 0:k_max) {
-  
-  last_avg_brier <- compute_avg_brier_score_for_threshold(brier_scores_threshold_plot_data, 
-                                                          predictive_samples, 
-                                                          1, 
-                                                          fatality_threshold = k)
-  
-  new_row <- tibble(a = k, brier_avg = last_avg_brier)
-  
-  df_avg_brier_scores_model_per_thresh <- bind_rows(df_avg_brier_scores_model_per_thresh, new_row)
-  
-  
-  pct <- k / k_max * 100
-  cat(paste0(round(pct), "%"), "\r")
-}
+# add log(y+1) column
+all_models_brier <- all_models_brier %>%
+  mutate(log_a_plus1 = log(a + 1))
+
+# filter for selected models
+selected_models_brier <- all_models_brier %>%
+  filter(model %in% selected_models)
+
+
+ggplot(selected_models_brier, aes(x = a, y = brier_avg, colour = model)) +
+  geom_line() +
+  labs(
+    x = "Threshold",
+    y = "Ø Brier-Score",
+    colour = "Model"
+  ) +
+  theme_fontsize
+
+
+
+model_brier <- all_models_brier %>%
+  filter(model == "bodentien_rueter_negbin")
+
+
+ggplot(model_brier, aes(x = a, y = brier_avg)) +
+  geom_line() + 
+  geom_vline(xintercept = 24, linetype = "dashed") +
+  ggplot2::labs(
+    title = "ROC Curve",
+    x = "FAR",
+    y = "HR"
+  ) +
+  theme_fontsize
+
+
+
+
 
 
 
@@ -1360,6 +1379,9 @@ df2 <- df_avg_brier_scores_model_per_thresh %>%
 
 ggplot(data = df2, aes(x = log_a, y = brier_avg)) + 
   geom_line()
+
+
+
 
 
 ## -----------------------------------------------------------------------------
