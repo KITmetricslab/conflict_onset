@@ -1292,34 +1292,34 @@ compute_avg_brier_score_for_threshold <- function(model_data, prediciton_data, m
 }
 
 
-## compute all average brier scores
+# # compute all average brier scores
 # all_models_brier <- tibble(
 #   model     = character(),
 #   a         = numeric(),
 #   brier_avg = numeric()
 # )
 # 
-# k_max <- 500
+# k_max <- 5000
 # 
 # for (m in 1:length(models_scoring_rules)) {
-#   
+# 
 #   name_model <- names(models_scoring_rules)[m]
 #   brier_scores_threshold_data <- models_scoring_rules[[m]] %>%
 #     select(country_id, month_id,actual)
-#   
+# 
 #   for (k in 0:k_max) {
-#     
-#     last_avg_brier <- compute_avg_brier_score_for_threshold(brier_scores_threshold_data, 
-#                                                             predictive_samples, 
-#                                                             m, 
+# 
+#     last_avg_brier <- compute_avg_brier_score_for_threshold(brier_scores_threshold_data,
+#                                                             predictive_samples,
+#                                                             m,
 #                                                             fatality_threshold = k)
-#     
+# 
 #     new_row <- tibble(model = name_model, a = k, brier_avg = last_avg_brier)
-#     
-#     all_models_brier <- bind_rows(all_models_brier, 
+# 
+#     all_models_brier <- bind_rows(all_models_brier,
 #                                   new_row)
-#     
-#     
+# 
+# 
 #     pct <- k / k_max * 100
 #     cat("model ", m ,"/", length(models_scoring_rules),": ", paste0(round(pct), "%"), "\r")
 #   }
@@ -1369,8 +1369,6 @@ if(store_plot == TRUE){
   }
 }
 
-
-
 crps_by_model <- crps_month_selected_models %>%
   group_by(Model) %>%
   summarise(total_crps = sum(CRPS), .groups = "drop") %>%
@@ -1388,10 +1386,105 @@ crps_crpsTRPZ_results <- selected_models_brier %>%
 
 crps_crpsTRPZ_results <- crps_crpsTRPZ_results %>%
   left_join(crps_by_model,
-            by = c("model" = "Model_orig"))
-
+            by = c("model" = "Model_orig")) %>%
+  mutate(trapz_proportion = crps_trapz/total_crps)
 
 print(crps_crpsTRPZ_results)
+
+
+
+
+
+
+
+########################################
+
+# bessere approximation des crps
+all_models_brier_greq5000 <- tibble(
+  model     = character(),
+  a         = numeric(),
+  brier_avg = numeric()
+)
+
+k_max <- max(observations_18_23$outcome)
+start_k <- max(all_models_brier$a) + 1
+
+for (m in 1:length(models_scoring_rules)) {
+
+  name_model <- names(models_scoring_rules)[m]
+  brier_scores_threshold_data <- models_scoring_rules[[m]] %>%
+    select(country_id, month_id,actual)
+
+  for (k in seq(from = start_k, to = k_max, by = 1000)) {
+
+    last_avg_brier <- compute_avg_brier_score_for_threshold(brier_scores_threshold_data,
+                                                            predictive_samples,
+                                                            m,
+                                                            fatality_threshold = k)
+
+    new_row <- tibble(model = name_model, a = k, brier_avg = last_avg_brier)
+
+    all_models_brier_greq5000 <- bind_rows(all_models_brier_greq5000,
+                                           new_row)
+
+
+    pct <- k / k_max * 100
+    cat("model ", m ,"/", length(models_scoring_rules),": ", paste0(round(pct), "%"), "\r")
+  }
+}
+
+
+all_models_brier_greq5000 <- all_models_brier_greq5000 %>%
+  mutate(log_a_plus1 = log(a + 1))
+
+all_models_brier_full <- bind_rows(
+  all_models_brier,
+  all_models_brier_greq5000
+) %>%
+  arrange(model, a)
+
+
+save(all_models_brier_full, file = "output/all_models_brier_threshold_extended.RData")
+load("output/all_models_brier_threshold_extended.RData")
+
+selected_models_brier_full <- all_models_brier_full %>%
+  filter(model %in% selected_models)
+
+
+ggplot(selected_models_brier_full, aes(x = a, y = brier_avg, colour = model)) +
+  geom_line(size = .95, alpha = 0.8) +
+  geom_vline(xintercept = 24, size = .6, linetype = "dashed", color = "grey20") + 
+  labs(
+    title = "Mean Brier Score by Threshold (CRPS Integrand)",
+    x = "Threshold a",
+    y = "Mean Brier Score",
+    colour = ""
+  ) +
+  scale_color_manual(
+    values = selected_model_colors,
+    breaks = names(selected_model_labels),
+    labels = selected_model_labels
+  ) +
+  theme_bw() +
+  theme_fontsize
+
+
+crps_crpsTRPZ_results <- selected_models_brier_full %>%
+  arrange(model, a) %>%
+  group_by(model) %>%
+  summarise(
+    crps_trapz = trapz(a, brier_avg),
+    .groups = "drop"
+  )
+
+crps_crpsTRPZ_results <- crps_crpsTRPZ_results %>%
+  left_join(crps_by_model,
+            by = c("model" = "Model_orig")) %>%
+  mutate(trapz_proportion = crps_trapz/total_crps)
+
+print(crps_crpsTRPZ_results)
+
+
 
 ## -----------------------------------------------------------------------------
 ## Figure 2g: Brier score per log-change threshold => twCRPS
