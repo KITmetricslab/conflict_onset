@@ -33,6 +33,7 @@ library(triptych)
 library(ggpattern)
 library(cowplot)
 library(pracma)
+library(forcats)
 
 #devtools::install_github("aijordan/reliabilitydiag")
 
@@ -560,7 +561,7 @@ prev_peace_prob_month_long_binary_actual <- prev_peace_prob_month_long %>%
 ## -----
 ## save plots in folders
 ## ----
-store_plot <- FALSE
+store_plot <- TRUE
 
 ## -----
 ## labels, colors, textsize etc.
@@ -923,9 +924,6 @@ crps_month_selected_models$Model <- recode(
   !!!model_labels
 )
 
-# plot
-library(forcats)
-
 crps_conflict_situation_plot <- crps_month_selected_models %>%
   group_by(Model) %>%
   summarise(total_crps = sum(CRPS), .groups = "drop") %>%
@@ -968,240 +966,8 @@ if(store_plot == TRUE){
 }
 
 
-
 ## -----------------------------------------------------------------------------
-## Figure 2c: CRPS decomposition for previous peace with Brier score
-## -----------------------------------------------------------------------------
-## ---
-## Selected models
-## ---
-crps_selected_models_prev_peace <- crps_month %>% filter(Model %in% selected_models) %>%
-  filter(Situation %in% c("peace", "onset")) %>%
-  mutate(Model_name = Model)
-
-model_order <- unlist(crps_selected_models_prev_peace %>%
-  group_by(Model) %>%
-  summarise(total_crps = sum(CRPS), .groups = "drop") %>%
-  arrange(total_crps) %>%
-  select(Model))
-
-model_order <- rev(model_order)
-
-brier_selected_models_prev_peace <- brier_month %>% filter(Model %in% selected_models) %>%
-  filter(Situation %in% c("peace", "onset"))
-
-# Compute CRPS remainder
-crps_brier_selected_models_prev_peace <- merge(crps_selected_models_prev_peace, brier_selected_models_prev_peace) %>%
-  mutate("CRPS_Remainder" = CRPS-Brier)
-
-# Create CRPS remainder part
-crps_brier_plot_data_Rem <- crps_brier_selected_models_prev_peace %>%
-  mutate(Situation = paste0(Situation, "-Remainder")) %>%
-  rename(Score = CRPS_Remainder) %>%
-  select(-c("CRPS", "Brier"))
-crps_brier_plot_data_BS <- crps_brier_selected_models_prev_peace %>%
-  mutate(Situation = paste0(Situation, "-Brier")) %>%
-  rename(Score = Brier) %>%
-  select(-c("CRPS", "CRPS_Remainder"))
-
-crps_brier_plot_data <- rbind(crps_brier_plot_data_Rem, crps_brier_plot_data_BS) %>%
-  arrange(factor(Model, levels = model_order))
-
-crps_brier_plot_data <- crps_brier_plot_data %>%
-  mutate(Model = factor(Model, levels = model_order))
-
-# Rename models
-crps_brier_plot_data$Model <- recode(
-  crps_brier_plot_data$Model,
-  !!!model_labels
-)
-
-# Plot
-crps_brier_prev_peace_plot <- crps_brier_plot_data  %>%
-  ggplot(aes(fill = Situation, y = Model, x = Score)) +
-  geom_bar(position = "stack", stat = "identity") +
-  labs(title = "Contribution to the Mean CRPS for Previous Peace with Brier Score",
-       x = "Mean CRPS") +
-  scale_fill_manual("Situation",
-                    values = c("onset-Remainder" = "#4664aa",
-                               "peace-Remainder" = "#a2b2d4",
-                               "onset-Brier" = "#555555",
-                               "peace-Brier" = "lightgrey"),
-                    labels = c("onset-Remainder" = "Onset (CRPS remainder)",
-                               "peace-Remainder" = "Continued peace (CRPS remainder)",
-                               "onset-Brier" = "Onset (Brier score)",
-                               "peace-Brier" = "Continued peace (Brier score)")) +
-  theme_minimal() +
-  theme(
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor.x = element_blank(),
-    axis.ticks.y = element_blank(),
-    legend.title = element_blank()
-  ) +
-  theme_fontsize
-
-crps_brier_prev_peace_plot
-
-if(store_plot == TRUE){
-  if(lower_fatalitiy_thresh == 0){
-    ggsave("plots_fatalities_greq1/crps_brier_prev_peace_1.png",
-           plot = crps_brier_prev_peace_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
-           bg="white")
-  } else {
-    ggsave("plots_fatalities_greq25/crps_brier_prev_peace_25.png",
-           plot = crps_brier_prev_peace_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
-           bg="white")
-  }
-}
-
-
-
-
-## -----------------------------------------------------------------------------
-## Figure 2d: Brier score decomposition for previous peace
-## -----------------------------------------------------------------------------
-## ---
-## Selected models
-## ---
-brier_selected_models_prev_peace <- brier_month %>% filter(Model %in% selected_models) %>%
-  filter(Situation %in% c("peace", "onset"))
-
-model_order_brier <- unlist(brier_selected_models_prev_peace %>%
-                              group_by(Model) %>%
-                              summarise(total_brier = sum(Brier), .groups = "drop") %>%
-                              arrange(total_brier) %>%
-                              select(Model))
-
-model_order_brier <- rev(model_order_brier)
-
-brier_selected_models_prev_peace <- brier_selected_models_prev_peace %>%
-  arrange(factor(Model, levels = model_order_brier))
-
-brier_selected_models_prev_peace <- brier_selected_models_prev_peace %>%
-  mutate(Model = factor(Model, levels = model_order_brier))
-
-# Rename models
-brier_selected_models_prev_peace$Model <- recode(
-  brier_selected_models_prev_peace$Model,
-  !!!model_labels
-)
-
-
-# Plot
-brier_prev_peace_plot <- brier_selected_models_prev_peace  %>%
-  ggplot(aes(fill = Situation, y = Model, x = Brier)) +
-  geom_bar(position = "stack", stat = "identity") +
-  labs(title = "Contribution to the Mean Brier Score for Previous Peace",
-       x = "Mean CRPS") +
-  scale_fill_manual("Situation",
-                    values = c("onset" = "#555555",
-                               "peace" = "lightgrey"),
-                    labels = c("onset" = "Onset (Brier score)",
-                               "peace" = "Continued peace (Brier score)")) +
-  theme_minimal() +
-  theme(
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor.x = element_blank(),
-    axis.ticks.y = element_blank(),
-    legend.title = element_blank()
-  ) +
-  theme_fontsize
-
-brier_prev_peace_plot
-
-if(store_plot == TRUE){
-  if(lower_fatalitiy_thresh == 0){
-    ggsave("plots_fatalities_greq1/brier_prev_peace_1.png",
-           plot = brier_prev_peace_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
-           bg="white")
-  } else {
-    ggsave("plots_fatalities_greq25/brier_prev_peace_25.png",
-           plot = brier_prev_peace_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
-           bg="white")
-  }
-}
-
-
-crps_brier_prev_peace_comb_plot <- crps_brier_prev_peace_plot / brier_prev_peace_plot +
-  plot_layout(heights = c(1, 1), guides = "keep") &
-  theme(
-    # same x for both legends -> horizontally aligned
-    legend.position = c(1, 0.55),        # tweak 1.02 -> 1.15 if you want it further right
-    legend.justification = c(0, 0.5),     # anchor left-middle of the legend box
-    legend.spacing.y = unit(0.2, "cm"),   # spacing within legend if stacked items
-    plot.margin = margin(5, 115, 5, 5)     # increase right margin so legends have room
-  ) &
-  coord_cartesian(clip = "off")             # prevent clipping of legend
-
-
-if(store_plot == TRUE){
-  if(lower_fatalitiy_thresh == 0){
-    ggsave("plots_fatalities_greq1/crps_brier_comb_prev_peace_1.png",
-           plot = crps_brier_prev_peace_comb_plot, width = 1.0 * 4222, height = 1.0 * 2600, dpi = 300, units = "px",
-           bg="white")
-  } else {
-    ggsave("plots_fatalities_greq25/crps_brier_comb_prev_peace_25.png",
-           plot = crps_brier_prev_peace_comb_plot, width = 1.0 * 4222, height = 1.0 * 2600, dpi = 300, units = "px",
-           bg="white")
-  }
-}
-
-
-crps_brier_comb_plot <- crps_conflict_situation_plot / crps_brier_prev_peace_plot / brier_prev_peace_plot +
-  plot_layout(heights = c(1, 1, 1), guides = "keep") &
-  theme(
-    # same x for both legends -> horizontally aligned
-    legend.position = c(1, 0.55),        # tweak 1.02 -> 1.15 if you want it further right
-    legend.justification = c(0, 0.5),     # anchor left-middle of the legend box
-    legend.spacing.y = unit(0.2, "cm"),   # spacing within legend if stacked items
-    plot.margin = margin(5, 115, 5, 5)     # increase right margin so legends have room
-  ) &
-  coord_cartesian(clip = "off")             # prevent clipping of legend
-
-crps_brier_comb_plot
-
-if(store_plot == TRUE){
-  if(lower_fatalitiy_thresh == 0){
-    ggsave("plots_fatalities_greq1/crps_brier_comb_1.png",
-           plot = crps_brier_comb_plot, width = 1.0 * 4222, height = 1.0 * 3900, dpi = 300, units = "px",
-           bg="white")
-  } else {
-    ggsave("plots_fatalities_greq25/crps_brier_comb_25.png",
-           plot = crps_brier_comb_plot, width = 1.0 * 4222, height = 1.0 * 3900, dpi = 300, units = "px",
-           bg="white")
-  }
-}
-
-
-# library(magick)
-#
-# if(store_plot == TRUE){
-#   if(lower_fatalitiy_thresh == 0){
-#     img <- image_read("plots_fatalities_greq1/crps_brier_comb_1.png")
-#   } else {
-#     img <- image_read("plots_fatalities_greq25/crps_brier_comb_25.png")
-#   }
-#   info <- image_info(img)
-#   width <- info$width
-#   height <- info$height
-#   part_height <- floor(height / 3)
-#
-#   for (i in 0:2) {
-#     top <- i * part_height
-#     bottom <- if (i < 2) part_height else height - top  # include remainder in last part
-#     part <- image_crop(img, geometry = geometry_area(width, bottom, 0, top))
-#     if(lower_fatalitiy_thresh == 0){
-#       image_write(part, path = paste0("plots_fatalities_greq1/crps_brier_comb_part_", i + 1, "_1.png"))
-#     } else {
-#       image_write(part, path = paste0("plots_fatalities_greq25/crps_brier_comb_part_", i + 1, "_25.png"))
-#     }
-#   }
-# }
-
-
-
-## -----------------------------------------------------------------------------
-## Figure 2e: twCRPS decomposition
+## Figure 2c: twCRPS decomposition
 ## -----------------------------------------------------------------------------
 ## ---
 ## Selected models
@@ -1211,12 +977,10 @@ twcrps_month_selected_models <- twcrps_month %>% filter(Model %in% selected_mode
 
 # Rename models
 twcrps_month_selected_models$Model <- recode(
-  crps_month_selected_models$Model,
+  twcrps_month_selected_models$Model,
   !!!model_labels
 )
 
-# plot
-library(forcats)
 
 twcrps_conflict_situation_plot <- twcrps_month_selected_models %>%
   group_by(Model) %>%
@@ -1264,7 +1028,68 @@ if(store_plot == TRUE){
 
 
 ## -----------------------------------------------------------------------------
-## Figure 2f: Brier score per threshold => CRPS
+## Figure 2d: Brier Score decomposition
+## -----------------------------------------------------------------------------
+## ---
+## Selected models
+## ---
+brier_month_selected_models <- brier_month %>% filter(Model %in% selected_models) %>%
+  mutate("Model_orig" = Model)
+
+# Rename models
+brier_month_selected_models$Model <- recode(
+  brier_month_selected_models$Model,
+  !!!model_labels
+)
+
+
+brier_conflict_situation_plot <- brier_month_selected_models %>%
+  group_by(Model) %>%
+  summarise(total_brier = sum(Brier), .groups = "drop") %>%
+  right_join(brier_month_selected_models, by = "Model") %>%
+  mutate(Model = fct_reorder(Model, total_brier, .desc = TRUE)) %>%
+  ggplot(aes(fill = Situation, y = Model, x = Brier)) +
+  geom_bar(position = "stack", stat = "identity") +
+  labs(title = "Contribution to the Mean Brier Score per Conflict Situation",
+       x = "Mean Brier Score") +
+  scale_fill_manual("Situation",
+                    values = c("conflict" = "#a22223",
+                               "deescalation" = "#d09191",
+                               "onset" = "#4664aa",
+                               "peace" = "#a2b2d4"),
+                    labels = c("conflict" = "Continued conflict",
+                               "deescalation" = "End / interruption of conflict",
+                               "onset" = "Onset",
+                               "peace" = "Continued peace")) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.ticks.y = element_blank(),
+    legend.title = element_blank()
+  ) +
+  theme_fontsize
+
+brier_conflict_situation_plot
+
+if(store_plot == TRUE){
+  if(lower_fatalitiy_thresh == 0){
+    ggsave("plots_fatalities_greq1/brier_conflict_situation_1.png",
+           plot = brier_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+           bg="white")
+  } else {
+    ggsave("plots_fatalities_greq25/brier_conflict_situation_25.png",
+           plot = brier_conflict_situation_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+           bg="white")
+  }
+}
+
+
+
+
+
+## -----------------------------------------------------------------------------
+## Figure 2e: Brier score per threshold => CRPS
 ## -----------------------------------------------------------------------------
 # function to compute the avg brier score for specific model and threshold
 compute_avg_brier_score_for_threshold <- function(model_data, prediciton_data, model_iterate, fatality_threshold){
@@ -1292,7 +1117,7 @@ compute_avg_brier_score_for_threshold <- function(model_data, prediciton_data, m
 }
 
 
-# # compute all average brier scores
+### compute all average brier scores-----
 # all_models_brier <- tibble(
 #   model     = character(),
 #   a         = numeric(),
@@ -1326,14 +1151,64 @@ compute_avg_brier_score_for_threshold <- function(model_data, prediciton_data, m
 # }
 # 
 # save(all_models_brier, file = "output/all_models_brier_threshold.RData")
-load("output/all_models_brier_threshold.RData")
+# load("output/all_models_brier_threshold.RData")
+#
+#
+# ## add log(y+1) column
+# all_models_brier <- all_models_brier %>%
+#   mutate(log_a_plus1 = log(a + 1))
+#
+#
+## add thresholds greq 5000 in steps by 1000 for computational matters
+# all_models_brier_greq5000 <- tibble(
+#   model     = character(),
+#   a         = numeric(),
+#   brier_avg = numeric()
+# )
+# 
+# k_max <- max(observations_18_23$outcome)
+# start_k <- max(all_models_brier$a) + 1
+# 
+# for (m in 1:length(models_scoring_rules)) {
+# 
+#   name_model <- names(models_scoring_rules)[m]
+#   brier_scores_threshold_data <- models_scoring_rules[[m]] %>%
+#     select(country_id, month_id,actual)
+# 
+#   for (k in seq(from = start_k, to = k_max, by = 1000)) {
+# 
+#     last_avg_brier <- compute_avg_brier_score_for_threshold(brier_scores_threshold_data,
+#                                                             predictive_samples,
+#                                                             m,
+#                                                             fatality_threshold = k)
+# 
+#     new_row <- tibble(model = name_model, a = k, brier_avg = last_avg_brier)
+# 
+#     all_models_brier_greq5000 <- bind_rows(all_models_brier_greq5000,
+#                                            new_row)
+# 
+# 
+#     pct <- k / k_max * 100
+#     cat("model ", m ,"/", length(models_scoring_rules),": ", paste0(round(pct), "%"), "\r")
+#   }
+# }
+#
+# all_models_brier_greq5000 <- all_models_brier_greq5000 %>%
+#   mutate(log_a_plus1 = log(a + 1))
+# 
+# all_models_brier_full <- bind_rows(
+#   all_models_brier,
+#   all_models_brier_greq5000
+# ) %>%
+#   arrange(model, a)
+# 
+# 
+# save(all_models_brier_full, file = "output/all_models_brier_threshold_extended.RData")
+# #----
 
-# add log(y+1) column
-all_models_brier <- all_models_brier %>%
-  mutate(log_a_plus1 = log(a + 1))
+load("output/all_models_brier_threshold_extended.RData")
 
-# filter for selected models
-selected_models_brier <- all_models_brier %>%
+selected_models_brier <- all_models_brier_full %>%
   filter(model %in% selected_models)
 
 
@@ -1346,6 +1221,7 @@ crps_brier_integrands_plot <- ggplot(selected_models_brier, aes(x = a, y = brier
     y = "Mean Brier Score",
     colour = ""
   ) +
+  xlim(0,200) + 
   scale_color_manual(
     values = selected_model_colors,
     breaks = names(selected_model_labels),
@@ -1364,17 +1240,20 @@ if(store_plot == TRUE){
            bg="white")
   } else {
     ggsave("plots_fatalities_greq25/crps_brier_integrands_plot_25.png",
-           plot = crps_brier_integrands_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+           plot = crps_brier_integrands_plot, width = 1.0 * 3200, height = 1.0 * 1300, dpi = 300, units = "px",
            bg="white")
   }
 }
 
+
+##
+# check if the approximation of the integration over the meanBS = meanCRPS
+##
 crps_by_model <- crps_month_selected_models %>%
   group_by(Model) %>%
   summarise(total_crps = sum(CRPS), .groups = "drop") %>%
   right_join(crps_month_selected_models, by = "Model") %>% 
   distinct(Model_orig, total_crps)
-
 
 crps_crpsTRPZ_results <- selected_models_brier %>%
   arrange(model, a) %>%
@@ -1393,101 +1272,8 @@ print(crps_crpsTRPZ_results)
 
 
 
-
-
-
-
-########################################
-
-# bessere approximation des crps
-all_models_brier_greq5000 <- tibble(
-  model     = character(),
-  a         = numeric(),
-  brier_avg = numeric()
-)
-
-k_max <- max(observations_18_23$outcome)
-start_k <- max(all_models_brier$a) + 1
-
-for (m in 1:length(models_scoring_rules)) {
-
-  name_model <- names(models_scoring_rules)[m]
-  brier_scores_threshold_data <- models_scoring_rules[[m]] %>%
-    select(country_id, month_id,actual)
-
-  for (k in seq(from = start_k, to = k_max, by = 1000)) {
-
-    last_avg_brier <- compute_avg_brier_score_for_threshold(brier_scores_threshold_data,
-                                                            predictive_samples,
-                                                            m,
-                                                            fatality_threshold = k)
-
-    new_row <- tibble(model = name_model, a = k, brier_avg = last_avg_brier)
-
-    all_models_brier_greq5000 <- bind_rows(all_models_brier_greq5000,
-                                           new_row)
-
-
-    pct <- k / k_max * 100
-    cat("model ", m ,"/", length(models_scoring_rules),": ", paste0(round(pct), "%"), "\r")
-  }
-}
-
-
-all_models_brier_greq5000 <- all_models_brier_greq5000 %>%
-  mutate(log_a_plus1 = log(a + 1))
-
-all_models_brier_full <- bind_rows(
-  all_models_brier,
-  all_models_brier_greq5000
-) %>%
-  arrange(model, a)
-
-
-save(all_models_brier_full, file = "output/all_models_brier_threshold_extended.RData")
-load("output/all_models_brier_threshold_extended.RData")
-
-selected_models_brier_full <- all_models_brier_full %>%
-  filter(model %in% selected_models)
-
-
-ggplot(selected_models_brier_full, aes(x = a, y = brier_avg, colour = model)) +
-  geom_line(size = .95, alpha = 0.8) +
-  geom_vline(xintercept = 24, size = .6, linetype = "dashed", color = "grey20") + 
-  labs(
-    title = "Mean Brier Score by Threshold (CRPS Integrand)",
-    x = "Threshold a",
-    y = "Mean Brier Score",
-    colour = ""
-  ) +
-  scale_color_manual(
-    values = selected_model_colors,
-    breaks = names(selected_model_labels),
-    labels = selected_model_labels
-  ) +
-  theme_bw() +
-  theme_fontsize
-
-
-crps_crpsTRPZ_results <- selected_models_brier_full %>%
-  arrange(model, a) %>%
-  group_by(model) %>%
-  summarise(
-    crps_trapz = trapz(a, brier_avg),
-    .groups = "drop"
-  )
-
-crps_crpsTRPZ_results <- crps_crpsTRPZ_results %>%
-  left_join(crps_by_model,
-            by = c("model" = "Model_orig")) %>%
-  mutate(trapz_proportion = crps_trapz/total_crps)
-
-print(crps_crpsTRPZ_results)
-
-
-
 ## -----------------------------------------------------------------------------
-## Figure 2g: Brier score per log-change threshold => twCRPS
+## Figure 2f: Brier score per log-change threshold => twCRPS
 ## -----------------------------------------------------------------------------
 twcrps_brier_integrands_plot <- ggplot(selected_models_brier, aes(x = log_a_plus1, y = brier_avg, colour = model)) +
   geom_line(size = .95, alpha = 0.8) +
@@ -1512,11 +1298,11 @@ twcrps_brier_integrands_plot
 if(store_plot == TRUE){
   if(lower_fatalitiy_thresh == 0){
     ggsave("plots_fatalities_greq1/twcrps_brier_integrands_plot_1.png",
-           plot = twcrps_brier_integrands_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+           plot = twcrps_brier_integrands_plot, width = 1.0 * 3200, height = 1.0 * 1300, dpi = 300, units = "px",
            bg="white")
   } else {
     ggsave("plots_fatalities_greq25/twcrps_brier_integrands_plot_25.png",
-           plot = twcrps_brier_integrands_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+           plot = twcrps_brier_integrands_plot, width = 1.0 * 3200, height = 1.0 * 1300, dpi = 300, units = "px",
            bg="white")
   }
 }
@@ -1992,15 +1778,22 @@ brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_s
     axis.line.x = element_blank(),
     axis.line.y = element_blank(),
     axis.text.x = ggplot2::element_text(size = 14)
-  )
+  ) 
 
 brier_score_decomposition_selected
 
 
-# ggsave("final_plots/brier_score_decomposition_selected.png",
-#        plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px")
-
-
+# if(store_plot == TRUE){
+#   if(lower_fatalitiy_thresh == 0){
+#     ggsave("plots_fatalities_greq1/brier_score_decomposition_selected.png",
+#            plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+#            bg="white")
+#   } else {
+#     ggsave("plots_fatalities_greq25/brier_score_decomposition_selected.png",
+#            plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+#            bg="white")
+#   }
+# }
 
 ## ---
 ## All models
