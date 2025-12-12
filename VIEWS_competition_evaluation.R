@@ -1448,27 +1448,133 @@ names(selected_colors) <- selected_models
 # -------------------------------------------------------------------
 # Function: Reliability Diagram
 # -------------------------------------------------------------------
-create_reliability_diag <- function(data, forecast_model) {
+# create_reliability_diag <- function(data, forecast_model) {
+# 
+#   # subset for selected model
+#   reliability_data_selected <- data %>%
+#     dplyr::filter(model == forecast_model)
+# 
+#   # compute reliability diagram
+#   r_selected <- reliabilitydiag(
+#     x = reliability_data_selected$onset_prob_pred,
+#     y = reliability_data_selected$actual
+#   )
+# 
+#   # base plot
+#   reliability_plot <- autoplot(r_selected)
+# 
+#   # strip out unwanted geom_segment layers
+#   is_seg <- sapply(reliability_plot$layers, function(layer) {
+#     inherits(layer$geom, "GeomSegment")
+#   })
+#   reliability_plot$layers <- reliability_plot$layers[!is_seg]
+# 
+#   # CEP estimates
+#   data_estim <- estimates(
+#     reliability(
+#       x = reliability_data_selected$onset_prob_pred,
+#       y = reliability_data_selected$actual
+#     )
+#   ) %>%
+#     dplyr::distinct() %>%
+#     dplyr::arrange(CEP)   # ensure order
+# 
+#   # build horizontal segment df
+#   df_segments <- data.frame()
+#   if (nrow(data_estim) > 1) {
+#     for (i in 1:(nrow(data_estim) - 1)) {
+#       if (data_estim$CEP[i] == data_estim$CEP[i + 1]) {
+#         df_segments <- rbind(
+#           df_segments,
+#           data.frame(
+#             x = min(data_estim$x[i], data_estim$x[i + 1]),
+#             x_end = max(data_estim$x[i], data_estim$x[i + 1]),
+#             CEP = data_estim$CEP[i],
+#             CEP_end = data_estim$CEP[i + 1]
+#           )
+#         )
+#       }
+#     }
+#   }
+# 
+#   # color for this model
+#   path_color <- selected_colors[forecast_model]
+# 
+#   # final plot
+#   p <- reliability_plot +
+#     ggplot2::labs(
+#       title = model_labels[forecast_model],
+#       x = "Forecast value",
+#       y = "CEP"
+#     ) +
+#     # theme_fontsize +
+#     # ggplot2::theme(
+#     #   legend.position = "none") +
+#     ggplot2::theme(
+#       plot.title = ggplot2::element_text(size = 12, hjust = 0.5),
+#       legend.position = "none"
+#     ) +
+#     ggplot2::geom_path(
+#       mapping = ggplot2::aes(x = .data$x, y = .data$CEP),
+#       data = data_estim,
+#       linewidth = 1,
+#       colour = path_color
+#     )
+# 
+#   # add flat horizontal segments if present
+#   if (nrow(df_segments) > 0) {
+#     p <- p + ggplot2::geom_segment(
+#       mapping = ggplot2::aes(
+#         x = .data$x, y = .data$CEP,
+#         xend = .data$x_end, yend = .data$CEP_end
+#       ),
+#       data = df_segments,
+#       linewidth = 1.4,
+#       colour = path_color
+#     )
+#   } else {
+#     # single-point case
+#     p <- p + ggplot2::geom_point(
+#       mapping = ggplot2::aes(x = .data$x, y = .data$CEP),
+#       data = data_estim,
+#       colour = path_color,
+#       shape = 19,
+#       size = 2
+#     )
+#   }
+# 
+#   return(p)
+# }
 
+create_reliability_diag <- function(data, forecast_model) {
+  
   # subset for selected model
   reliability_data_selected <- data %>%
     dplyr::filter(model == forecast_model)
-
+  
   # compute reliability diagram
   r_selected <- reliabilitydiag(
     x = reliability_data_selected$onset_prob_pred,
     y = reliability_data_selected$actual
   )
-
+  
   # base plot
   reliability_plot <- autoplot(r_selected)
-
-  # strip out unwanted geom_segment layers
-  is_seg <- sapply(reliability_plot$layers, function(layer) {
-    inherits(layer$geom, "GeomSegment")
-  })
+  
+  # # strip out unwanted geom_segment layers
+  # is_seg <- sapply(reliability_plot$layers, function(layer) {
+  #   inherits(layer$geom, "GeomSegment")
+  # })
+  # reliability_plot$layers <- reliability_plot$layers[!is_seg]
+  
+  
+  
+  
+  is_seg <- c(FALSE, FALSE, FALSE, FALSE, TRUE)
   reliability_plot$layers <- reliability_plot$layers[!is_seg]
-
+  
+  
+  
   # CEP estimates
   data_estim <- estimates(
     reliability(
@@ -1478,7 +1584,7 @@ create_reliability_diag <- function(data, forecast_model) {
   ) %>%
     dplyr::distinct() %>%
     dplyr::arrange(CEP)   # ensure order
-
+  
   # build horizontal segment df
   df_segments <- data.frame()
   if (nrow(data_estim) > 1) {
@@ -1496,10 +1602,10 @@ create_reliability_diag <- function(data, forecast_model) {
       }
     }
   }
-
+  
   # color for this model
   path_color <- selected_colors[forecast_model]
-
+  
   # final plot
   p <- reliability_plot +
     ggplot2::labs(
@@ -1517,10 +1623,20 @@ create_reliability_diag <- function(data, forecast_model) {
     ggplot2::geom_path(
       mapping = ggplot2::aes(x = .data$x, y = .data$CEP),
       data = data_estim,
-      linewidth = 1,
+      linewidth = 0.8,
       colour = path_color
+    ) + ggplot2::geom_segment(
+      aes(
+        x = 0,
+        y = 0,
+        xend = 1,
+        yend = 1
+      ),
+      inherit.aes = FALSE,
+      colour = "grey20",
+      linewidth = 0.6
     )
-
+  
   # add flat horizontal segments if present
   if (nrow(df_segments) > 0) {
     p <- p + ggplot2::geom_segment(
@@ -1529,7 +1645,7 @@ create_reliability_diag <- function(data, forecast_model) {
         xend = .data$x_end, yend = .data$CEP_end
       ),
       data = df_segments,
-      linewidth = 1.4,
+      linewidth = 1.2,
       colour = path_color
     )
   } else {
@@ -1539,10 +1655,11 @@ create_reliability_diag <- function(data, forecast_model) {
       data = data_estim,
       colour = path_color,
       shape = 19,
-      size = 2
-    )
+      size = 1.5
+    ) +
+      ggplot2::coord_cartesian(ylim = c(0, 1), xlim = c(0, 1))
   }
-
+  
   return(p)
 }
 
