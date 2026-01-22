@@ -450,20 +450,6 @@ brier_month <- data.frame("Brier" = unlist(c(models_brier_conflict_month[,2:ncol
                           "Model" = rep(names(models_brier_conflict_month)[2:ncol(models_brier_conflict_month)], each = 4))
 
 
-## ---
-## Plot-Data: log-score values by conflict situation for the onset problem (y \in {0,1})
-## ---
-models_logscore_conflict <- lapply(models_scoring_rules, function(m) m %>% select("country_id", "month_id", "log_score_onset")) %>%
-  reduce(left_join, c("country_id", "month_id"))
-
-
-names(models_logscore_conflict) <- c("country_id", "month_id", model_names)
-models_logscore_conflict <- list(models_logscore_conflict, conflict_situations) %>% reduce(left_join, c("country_id", "month_id"))
-
-models_logscore_conflict_month <- models_logscore_conflict %>% select(!c("country_id", "month_id")) %>% group_by(situation_month) %>% summarise_all(sum)
-
-models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] <- models_logscore_conflict_month[,2:ncol(models_logscore_conflict_month)] / nrow(models_logscore_conflict) # compute contributions to average CRPS
-
 
 
 
@@ -540,7 +526,7 @@ prev_peace_prob_month_long_binary_actual <- prev_peace_prob_month_long %>%
 ## -----
 ## save plots in folders
 ## ----
-store_plot <- TRUE
+store_plot <- FALSE
 
 ## -----
 ## labels, colors, textsize etc.
