@@ -332,7 +332,7 @@ prev_peace_prob_month_long_binary_actual <- prev_peace_prob_month_long_binary_ac
 ## ---
 ## save plots in folders
 ## ---
-store_plot <- TRUE
+store_plot <- FALSE
 
 ## ---
 ## labels, colors, textsize etc.

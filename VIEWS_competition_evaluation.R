@@ -2341,7 +2341,7 @@ twcrps_rankings_selected_models <- twcrps_month_selected_models %>%
   select(Model, rank_twCRPS)
 
 brier_per_peace_rankings_selected_models <- brier_month_selected_models %>%
-  filter(Situation == "onset" | Situation == "peace") %>%
+  #filter(Situation == "onset" | Situation == "peace") %>%
   group_by(Model) %>%
   summarise(total_Brier = sum(Brier), .groups = "drop") %>%
   right_join(brier_month_selected_models, by = "Model") %>%
@@ -2488,7 +2488,7 @@ p_right <- ggplot() +
   geom_line(data = right_curves, aes(x = x, y = y, color = Model), linewidth = 1.1) +
   geom_point(data = right_pts,  aes(x = 0, y = y,  color = Model), size = 2) +
   geom_point(data = right_pts,  aes(x = 1, y = y2, color = Model), size = 2) +
-  annotate("text", x = 1 - 0.012, y = 0.6, label = "Brier Onset",
+  annotate("text", x = 1 - 0.012, y = 0.6, label = "Brier Score",
            fontface = "bold", hjust = 1, colour = axis_col, size = 5) +
   scale_color_manual(values = selected_colors_Model, guide = "none") +
   scale_x_continuous(limits = c(0, 1.1), breaks = NULL, expand = c(0, 0)) +
