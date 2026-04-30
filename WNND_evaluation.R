@@ -31,50 +31,50 @@ library(forcats)
 library(distfromq)
 
 
+# Erkenne das Betriebssystem
+os <- Sys.info()["sysname"]
+
+# Setze den Pfad abhängig vom Betriebssystem
+# data_path <- "../Data/"
+data_path <- ifelse(os == "Windows",
+                    "//stat-meth-file1.stat.kit.edu/share-alle/Data/WNV forecasting challenge 2020/",  # Windows
+                    "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/WNV forecasting challenge 2020/")  # macOS/Linux
+
+
+predictions_ARS <- paste0(data_path, "2020-04-30_ARS.csv")
+data_ARS <- read.csv(predictions_ARS)
 
 
 
 
+prediction_files <- list.files(path = data_path, 
+                               pattern = "^2020-.*\\.csv$", 
+                               full.names = TRUE)
+
+
+# read all files and bind them into a single data frame
+df_predictions <- do.call(rbind, lapply(prediction_files, read.csv))
+
+# upper bounds of the bins (quantiles)
+qs <- c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100, 150, 200, 999)
 
 
 
+### example
+
+example_forecast_ARS <- df_predictions$value[17:31]
+bin_probs <- example_forecast_ARS
 
 
 
-
-
-
-
-
-
-
-
-
-# example prediction
-bin_probs <- c(
-  0.572377761,    # Bin 0
-  0.426117879,    # Bin 1-5
-  0.001459964,    # Bin 6-10
-  4.11e-05,       # Bin 11-15
-  2.88e-06,       # Bin 16-20
-  3.45e-07,       # Bin 21-25
-  5.68e-08,       # Bin 26-30
-  1.17e-08,       # Bin 31-35
-  2.82e-09,       # Bin 36-40
-  1.77e-10        # Bin 41-45
-)
-
-# 2. upper bounds of the bins (quantiles)
-qs <- c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45)
-
-# 3. cumulativ distribution (ps)
+# cdf (ps)
 ps <- cumsum(bin_probs)
 
 # WICHTIG: Falls die Summe durch Rundungsfehler minimal über 1 liegt, auf 1 begrenzen
 ps[ps > 1] <- 1
 
 
-x <- seq(from = -1, to = 50, length = 1000)
+x <- seq(from = -0.5, to = 1000, length = 1000)
 
 p_lognormal_approx <- make_p_fn(ps = ps,
                                 qs = qs,
@@ -95,43 +95,21 @@ data.frame(
     mapping = aes(x = q, y = p),
     size = 1.2
   ) +
+  scale_x_log10() + 
   ylim(0, 1) +
   ylab("Probability") +
   xlab("") +
-  theme_bw()
+  theme_bw() + 
+  xlim(0,20)
 
 
 
-plot_ps <- seq(0.001, 0.999, length.out = 1000)
 
-length(plot_ps)
+## für alle predictions aus der CDF (die für alle auf die selbe Art und Weise erzeugt wird) die WKs
+# für die count-valued outcomes ablesen( 0-999 ). Das ist implizit die Treppenfunktion (und somit CRPS = RPS).
+# Wie genau CDF erzeugt wird laut Johannes nicht so wichtig.
 
-q_lognormal_approx <- make_q_fn(ps = ps,
-                                qs = qs,
-                                tail_dist = "lnorm")
-qf_lognormal_approx <- q_lognormal_approx(plot_ps)
 
-# Rundung problematisch? damit Wk für x=0 nicht mehr korrekt sondern höher
-qf_lognormal_approx <- round(qf_lognormal_approx, 0)
-
-data.frame(
-  x = plot_ps,
-  y = qf_lognormal_approx
-) %>%
-  ggplot() +
-  geom_line(
-    mapping = aes(x = x, y = y),
-    size = 0.8
-  ) +
-  geom_point(
-    data = data.frame(q = ps, p = qs),
-    mapping = aes(x = q, y = p),
-    size = 1.2
-  ) +
-  xlim(0, 1) +
-  xlab("Probability") +
-  ylab("") +
-  theme_bw()
 
 
 
