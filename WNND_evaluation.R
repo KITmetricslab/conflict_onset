@@ -29,6 +29,7 @@ library(cowplot)
 library(pracma)
 library(forcats)
 library(distfromq)
+library(readxl)
 
 
 # Erkenne das Betriebssystem
@@ -41,35 +42,123 @@ data_path <- ifelse(os == "Windows",
                     "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/WNV forecasting challenge 2020/")  # macOS/Linux
 
 
-predictions_ARS <- paste0(data_path, "2020-04-30_ARS.csv")
-data_ARS <- read.csv(predictions_ARS)
+
+df_actual <- read.csv(paste0(data_path, "West Nile virus human and non-human activity by area of residence for year selected below_.csv"))
 
 
+### Surveillance data are reported by county of residence, not the location (county or state) of exposure.
+# https://www.cdc.gov/west-nile-virus/data-maps/historic-data.html
 
+### achtung nur 480 counties im Datensatz: ist es üblich die zeros einfach nicht zu reporten?
+df_actual <- df_actual %>%
+  filter(Year == "2020") %>%
+  select(-Activity, 
+         -Total.human.disease.cases,
+         -X..Presumptive.viremic.blood.donors, 
+         -Notes)
 
+geocodes <- read_excel(paste0(data_path, "all-geocodes-v2020.xlsx"), skip = 4)
+
+# all files that begin with "2020-04-30"
 prediction_files <- list.files(path = data_path, 
-                               pattern = "^2020-.*\\.csv$", 
+                               pattern = "^2020-04-30.*\\.csv$", 
                                full.names = TRUE)
+
+test_df <- df_predictions %>% 
+  filter(team == "ARS",
+         type == "Point")
 
 
 # read all files and bind them into a single data frame
 df_predictions <- do.call(rbind, lapply(prediction_files, read.csv))
+
+
+model_names <- c("ARS", "LANL", "MHC", "MSSM", "NCSU", "NYSW", 
+                       "NYSW-CVD", "Rutgers", "Standford", "UA", 
+                       "UCD", "UI", "UI-NCSA", "WDH")
+
+n_models <- length(model_names)
+
+
+
+
+
+
+
+
+
+
+
+
+## ------------------------------------------------------------------------------------------------------------
+## define lower threshold for binary event of a present outbreak
+## -----
+lower_infections_thresh = 0
+
+
+
+
+
+
+
+
+
 
 # upper bounds of the bins (quantiles)
 qs <- c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100, 150, 200, 999)
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### example
 
 example_forecast_ARS <- df_predictions$value[17:31]
+#example_forecast_ARS <- df_predictions$value[1:15]
 bin_probs <- example_forecast_ARS
 
 
 
 # cdf (ps)
 ps <- cumsum(bin_probs)
-
 # WICHTIG: Falls die Summe durch Rundungsfehler minimal über 1 liegt, auf 1 begrenzen
 ps[ps > 1] <- 1
 
@@ -101,6 +190,40 @@ data.frame(
   xlab("") +
   theme_bw() + 
   xlim(0,20)
+
+
+
+
+x_counts <- 0:999  # Alternativ: seq(from = 0, to = 1000, by = 1)
+
+# 2. Werte die CDF an genau diesen ganzzahligen Stellen aus
+cdf_at_counts <- p_lognormal_approx(x_counts)
+
+# Wenn du für weitere Berechnungen die Wahrscheinlichkeiten für JEDEN EINZELNEN Count brauchst
+# (also P(X=0), P(X=1), P(X=2) etc. aus der Treppenfunktion ableiten willst):
+# Das ist die Differenz zwischen dem aktuellen und dem vorherigen CDF-Wert.
+prob_at_counts <- c(cdf_at_counts[1], diff(cdf_at_counts))
+
+# 3. Speichere das Ergebnis übersichtlich in einem Data Frame
+df_counts <- data.frame(
+  Count = x_counts,
+  CDF = cdf_at_counts,       # P(X <= Count)
+  Probability = prob_at_counts # P(X == Count)
+)
+
+
+actual <- 0
+
+
+indicator <- as.numeric(x_counts >= actual)
+weight <- 1 / (x_counts + 1)
+
+# RPS discrete version of CRPS
+rps <- sum((df_counts$CDF - indicator)^2)
+# twRPS discrete version of twCRPS
+twrps <- sum(weight * (df_counts$CDF - indicator)^2)
+
+# BRIER Score for Onset meaning > 0 WNVND infections
 
 
 
