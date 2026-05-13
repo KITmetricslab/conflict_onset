@@ -43,8 +43,96 @@ data_path <- ifelse(os == "Windows",
 
 
 
-df_actual <- read.csv(paste0(data_path, "West Nile virus human and non-human activity by area of residence for year selected below_.csv"))
+## -----
+## prediction dataset
+## -----
+# all files that begin with "2020-04-30"
+prediction_files <- list.files(path = data_path, 
+                               pattern = "^2020-04-30.*\\.csv$", 
+                               full.names = TRUE)
 
+# read all files and bind them into a single data frame
+df_predictions <- do.call(rbind, lapply(prediction_files, read.csv))
+
+df_predictions <- df_predictions %>%
+  filter(type == "Bin")%>%
+  select(-type, -unit)
+
+## -----
+## WNVND prediction competition participants
+## -----
+model_names <- c("ARS", "LANL", "MHC", "MSSM", "NCSU", "NYSW", 
+                 "NYSW-CVD", "Rutgers", "Standford", "UA", 
+                 "UCD", "UI", "UI-NCSA", "WDH")
+
+n_models <- length(model_names)
+
+
+## -----
+## FIPS county codes for easy identification and alignement of location names
+## to the ones in the prediction dataframe
+## -----
+
+# FIPS codes from
+# https://www.census.gov/geographies/reference-files/2020/demo/popest/2020-fips.html
+geocodes <- read_excel(paste0(data_path, "all-geocodes-v2020.xlsx"), skip = 4)
+
+geocodes <- geocodes %>%
+  filter(`Summary Level` %in% c("040", "050"))
+
+
+state_lookup <- geocodes %>%
+  filter(`Summary Level` == "040") %>%
+  select(`State Code (FIPS)`, location = `Area Name (including legal/statistical area description)`)
+
+geocodes <- geocodes %>%
+  left_join(state_lookup, by = "State Code (FIPS)") %>%
+  filter(`Summary Level` == "050") %>%
+  mutate(location = paste0(location, "-", `Area Name (including legal/statistical area description)`))
+
+geocodes <- geocodes %>%
+  mutate(location = str_replace_all(location, "city", "City"))
+
+county_endings_to_delete <- "\\s+(County|Parish|Borough|Census Area|Municipality)$"
+
+# delete endings in location that are in county_endings_to_delete
+geocodes <- geocodes %>%
+  mutate(location = str_remove(location, county_endings_to_delete))
+
+# standardize naming convention from geocodes codebook to the one used in the prediction data
+geocodes <- geocodes %>%
+  mutate(location = str_replace(location, "Illinois-LaSalle", "Illinois-La Salle"),
+         location = str_replace(location, "Indiana-DeKalb", "Indiana-De Kalb"),
+         location = str_replace(location, "Indiana-LaPorte", "Indiana-La Porte"),
+         location = str_replace(location, "Indiana-LaGrange", "Indiana-Lagrange"),
+         location = str_replace(location, "Iowa-O'Brien", "Iowa-OBrien"),
+         location = str_replace(location, "Louisiana-LaSalle", "Louisiana-La Salle"),
+         location = str_replace(location, "Maryland-Prince George's", "Maryland-Prince Georges"),
+         location = str_replace(location, "Maryland-Queen Anne's", "Maryland-Queen Annes"),
+         location = str_replace(location, "Maryland-St. Mary's", "Maryland-St. Marys"),
+         location = str_replace(location, "New Mexico-Doña Ana", "New Mexico-Dona Ana"),
+         location = str_replace(location, "New Mexico-De Baca", "New Mexico-DeBaca"))
+
+# uique list of the counties that predictions have been made for
+all_locations_predictions <- unique(df_predictions$location)
+
+# # test if all counties from the prediction data are in the geocodes dataset
+# all_locations_geocodes <- unique(geocodes$location)
+# missing_counties <- setdiff(all_locations_predictions, all_locations_geocodes)
+# str_subset(all_locations_geocodes, "^Maryland-Q")
+
+
+geocodes <- geocodes %>%
+  filter(location %in% all_locations_predictions) %>%
+  mutate(FIPS = paste0(`State Code (FIPS)`, `County Code (FIPS)`)) %>%
+  mutate(FIPS = as.numeric(FIPS)) %>%
+  select(location, FIPS)
+
+
+## -----
+## actual dataset
+## -----
+df_actual <- read.csv(paste0(data_path, "West Nile virus human and non-human activity by area of residence for year selected below_.csv"))
 
 ### Surveillance data are reported by county of residence, not the location (county or state) of exposure.
 # https://www.cdc.gov/west-nile-virus/data-maps/historic-data.html
@@ -57,30 +145,40 @@ df_actual <- df_actual %>%
          -X..Presumptive.viremic.blood.donors, 
          -Notes)
 
-geocodes <- read_excel(paste0(data_path, "all-geocodes-v2020.xlsx"), skip = 4)
+df_actual <- df_actual %>%
+  rename(FIPS = Location,
+         actual = Neuroinvasive.disease.cases) %>%
+  select(-FullGeoName)
 
-# all files that begin with "2020-04-30"
-prediction_files <- list.files(path = data_path, 
-                               pattern = "^2020-04-30.*\\.csv$", 
-                               full.names = TRUE)
+df_actual <- left_join(df_actual, geocodes, by = "FIPS")
 
-test_df <- df_predictions %>% 
-  filter(team == "ARS",
-         type == "Point")
+new_actual_rows_for_counties_no_data_available <- geocodes %>%
+  anti_join(df_actual, by = "FIPS") %>%
+  
+  mutate(
+    Year = 2020,
+    actual = 0
+  ) %>%
+  
+  select(Year, FIPS, actual, location)
 
+df_actual <- bind_rows(df_actual, new_actual_rows_for_counties_no_data_available)
 
-# read all files and bind them into a single data frame
-df_predictions <- do.call(rbind, lapply(prediction_files, read.csv))
-
-
-model_names <- c("ARS", "LANL", "MHC", "MSSM", "NCSU", "NYSW", 
-                       "NYSW-CVD", "Rutgers", "Standford", "UA", 
-                       "UCD", "UI", "UI-NCSA", "WDH")
-
-n_models <- length(model_names)
+# sort by FIPS
+df_actual <- df_actual %>%
+  arrange(FIPS)
 
 
 
+
+## -----
+## create list of predictive probabilites for all models
+## -----
+
+## join actual and predictions dataset
+df_predictions <- left_join(df_predictions, df_actual, by = "location") %>%
+  select(-target)%>%
+  relocate(Year, FIPS, .after = 1)
 
 
 
