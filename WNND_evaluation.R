@@ -62,7 +62,7 @@ df_predictions <- df_predictions %>%
 ## WNVND prediction competition participants
 ## -----
 model_names <- c("ARS", "LANL", "MHC", "MSSM", "NCSU", "NYSW", 
-                 "NYSW-CVD", "Rutgers", "Standford", "UA", 
+                 "NYSW-CVD", "Rutgers", "Stanford", "UA", 
                  "UCD", "UI", "UI-NCSA", "WDH")
 
 n_models <- length(model_names)
@@ -181,6 +181,212 @@ df_predictions <- left_join(df_predictions, df_actual, by = "location") %>%
   relocate(Year, FIPS, .after = 1)
 
 
+# list to store probabilistic predictions (in terms of CDFs)
+predictive_probs <- list()
+
+# upper bounds of the bins (quantiles)
+qs <- c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100, 150, 200, 999)
+# count values of the PDF
+x_counts <- 0:999
+
+# function to estimate PMF and CDF from binned forecasts
+expand_prediction <- function(bin_probs) {
+  
+  if (bin_probs[1] >= 0.9999) {
+    cdf_at_counts <- rep(1, length(x_counts))       # CDF is 1 for all counts
+    prob_at_counts <- c(1, rep(0, length(x_counts) - 1)) # PMF is 1 at 0, 0 otherwise
+    
+    return(tibble(
+      count = x_counts,
+      PMF = prob_at_counts,
+      CDF = cdf_at_counts
+    ))
+  }
+  
+  ### PRÜFEN OB DAS SINNVOLL IST #######################
+  
+  
+  # 2. NEU: "Epsilon Smoothing" gegen die NaNs
+  # Wir addieren eine extrem kleine Zahl, damit kein Wert jemals EXAKT 0 ist.
+  bin_probs_safe <- bin_probs + 1e-10
+  
+  # Dadurch summiert sich alles auf etwas mehr als 1. 
+  # Wir teilen durch die neue Summe, um es wieder perfekt auf 1.0 zu normieren.
+  bin_probs_safe <- bin_probs_safe / sum(bin_probs_safe)
+  
+  ps <- cumsum(bin_probs_safe)
+  
+  ###############################################
+  
+  #ps <- cumsum(bin_probs)
+  ps[ps > 1] <- 1 # CDF has to be <= 1, rounding errors
+  
+  # fit cdf via distfromq
+  p_lognormal_approx <- make_p_fn(ps = ps,
+                                  qs = qs,
+                                  tail_dist = "lnorm")
+  
+  # get CDF at the count values
+  cdf_at_counts <- p_lognormal_approx(x_counts)
+  
+  # PMF out of the step function CDF
+  prob_at_counts <- c(cdf_at_counts[1], diff(cdf_at_counts))
+  
+  # return dataframe
+  tibble(
+    count = x_counts,
+    PMF = prob_at_counts,
+    CDF = cdf_at_counts
+  )
+}
+
+# fill 
+for (m in 1:length(model_names)) { 
+  
+  current_team <- model_names[m]
+  
+  df_model <- df_predictions %>%
+    filter(team == current_team)
+  
+  # group by (location, FIPS, Year, actual)
+  # isolate 15 rows (predictions per bin), 
+  # apply 'expand_prediction' to column 'value' 
+  df_expanded <- df_model %>%
+    group_by(location, FIPS, Year, actual) %>%
+    reframe(expand_prediction(value)) %>%
+    ungroup()
+  
+  # order df
+  df_expanded <- df_expanded %>%
+    select(location, FIPS, count, Year, PMF, CDF, actual)
+  
+  predictive_probs[[current_team]] <- as.data.frame(df_expanded)
+}
+
+
+
+
+
+
+
+
+
+models_scoring_rules <- list()
+
+for (m in names(predictive_probs)) {
+  
+  models_scoring_rules[[m]] <- predictive_probs[[m]] %>%
+    # 1. R weiß jetzt: "Ah, für jede dieser Kombinationen brauche ich am Ende genau 1 Zeile"
+    group_by(FIPS, location, Year, actual) %>%
+    
+    # 2. summarise baut die finale Tabelle direkt zusammen
+    summarise(
+      # Die Berechnungen, die wir schon haben:
+      rps = sum((CDF - as.numeric(count >= actual))^2),
+      
+      twrps = sum((1 / (count + 1)) * (CDF - as.numeric(count >= actual))^2),
+      
+      outbreak_prob_pred = sum(PMF[count > 0]),
+      
+      # 3. NEU: Gab es in der Realität einen Ausbruch? (1 = Ja, 0 = Nein)
+      actual_infection = as.numeric(any(actual > 0)),
+      
+      # 4. NEU: Brier Score für Onset (Quadrierte Abweichung der Vorhersage von der Realität)
+      brier_outbreak = (outbreak_prob_pred - actual_infection)^2,
+      
+      #########brier_outbreak_log_target,
+      
+      outbreak_prob_pred_nplustwo = (outbreak_prob_pred * 1000 + 1) / 1002,
+      
+      log_score_outbreak = ifelse(actual_infection == 1, 
+                               log(outbreak_prob_pred_nplustwo), 
+                               log(1 - outbreak_prob_pred_nplustwo)),
+      
+      .groups = "drop" # Hebt die Gruppierung am Ende sauber auf
+    ) %>%
+    
+    # Optional: Falls du es als klassisches Dataframe speichern willst
+    as.data.frame()
+}
+
+
+
+
+
+
+
+
+
+
+
+# 
+# 
+# 
+# 
+# # example
+# bin_probs <- df_predictions$value[1:15]
+# 
+# # cdf (ps)
+# ps <- cumsum(bin_probs)
+# ps[ps > 1] <- 1 # CDF has to be <= 1, rounding errors
+# 
+# # fit cdf via distfromq
+# p_lognormal_approx <- make_p_fn(ps = ps,
+#                                 qs = qs,
+#                                 tail_dist = "lnorm")
+# 
+# 
+# # get CDF at the count values (equals step function CDF)
+# cdf_at_counts <- p_lognormal_approx(x_counts)
+# 
+# # PMF out of the step function CDF
+# prob_at_counts <- c(cdf_at_counts[1], diff(cdf_at_counts))
+# 
+# # save in dataframe
+# df_counts <- data.frame(
+#   Count = x_counts,
+#   CDF = cdf_at_counts,       # P(X <= Count)
+#   Probability = prob_at_counts # P(X == Count)
+# )
+
+
+
+
+
+
+
+
+
+
+
+unique(df_predictions$team)
+
+
+
+
+df_predictions %>%
+  filter(team == current_team,
+         location == "Arizona-Pinal")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -209,48 +415,8 @@ qs <- c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100, 150, 200, 999)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ### example
-
-example_forecast_ARS <- df_predictions$value[17:31]
-#example_forecast_ARS <- df_predictions$value[1:15]
+example_forecast_ARS <- df_predictions$value[1:15]
 bin_probs <- example_forecast_ARS
 
 
@@ -308,6 +474,18 @@ df_counts <- data.frame(
   CDF = cdf_at_counts,       # P(X <= Count)
   Probability = prob_at_counts # P(X == Count)
 )
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 actual <- 0
