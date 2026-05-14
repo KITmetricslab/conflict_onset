@@ -138,22 +138,22 @@ df_actual <- read.csv(paste0(data_path, "West Nile virus human and non-human act
 # https://www.cdc.gov/west-nile-virus/data-maps/historic-data.html
 
 ### achtung nur 480 counties im Datensatz: ist es üblich die zeros einfach nicht zu reporten?
-df_actual <- df_actual %>%
+df_actual_2020 <- df_actual %>%
   filter(Year == "2020") %>%
   select(-Activity, 
          -Total.human.disease.cases,
          -X..Presumptive.viremic.blood.donors, 
          -Notes)
 
-df_actual <- df_actual %>%
+df_actual_2020 <- df_actual_2020 %>%
   rename(FIPS = Location,
          actual = Neuroinvasive.disease.cases) %>%
   select(-FullGeoName)
 
-df_actual <- left_join(df_actual, geocodes, by = "FIPS")
+df_actual_2020 <- left_join(df_actual_2020, geocodes, by = "FIPS")
 
 new_actual_rows_for_counties_no_data_available <- geocodes %>%
-  anti_join(df_actual, by = "FIPS") %>%
+  anti_join(df_actual_2020, by = "FIPS") %>%
   
   mutate(
     Year = 2020,
@@ -162,10 +162,10 @@ new_actual_rows_for_counties_no_data_available <- geocodes %>%
   
   select(Year, FIPS, actual, location)
 
-df_actual <- bind_rows(df_actual, new_actual_rows_for_counties_no_data_available)
+df_actual_2020 <- bind_rows(df_actual_2020, new_actual_rows_for_counties_no_data_available)
 
 # sort by FIPS
-df_actual <- df_actual %>%
+df_actual_2020 <- df_actual_2020 %>%
   arrange(FIPS)
 
 
@@ -176,7 +176,7 @@ df_actual <- df_actual %>%
 ## -----
 
 ## join actual and predictions dataset
-df_predictions <- left_join(df_predictions, df_actual, by = "location") %>%
+df_predictions <- left_join(df_predictions, df_actual_2020, by = "location") %>%
   select(-target)%>%
   relocate(Year, FIPS, .after = 1)
 
@@ -266,7 +266,10 @@ for (m in 1:length(model_names)) {
 
 
 
-
+## -----
+## define lower threshold for binary event of a present outbreak
+## -----
+lower_infections_thresh = 0
 
 
 
@@ -289,7 +292,7 @@ for (m in names(predictive_probs)) {
       outbreak_prob_pred = sum(PMF[count > 0]),
       
       # 3. NEU: Gab es in der Realität einen Ausbruch? (1 = Ja, 0 = Nein)
-      actual_infection = as.numeric(any(actual > 0)),
+      actual_infection = first(actual) > lower_infections_thresh,
       
       # 4. NEU: Brier Score für Onset (Quadrierte Abweichung der Vorhersage von der Realität)
       brier_outbreak = (outbreak_prob_pred - actual_infection)^2,
@@ -310,9 +313,71 @@ for (m in names(predictive_probs)) {
 }
 
 
+## -----
+# label observations as either no infections ("none"), 
+# WNVND outbreak ("onset"), ongoing infections ("ongoing") or 
+# end of infections ("resolved")
+# based on the WNVND cases from the previous year 2019
+## -----
+df_actual_2019 <- df_actual %>%
+  filter(Year == "2019") %>%
+  select(-Activity, 
+         -Total.human.disease.cases,
+         -X..Presumptive.viremic.blood.donors, 
+         -Notes)
+
+df_actual_2019 <- df_actual_2019 %>%
+  rename(FIPS = Location,
+         actual = Neuroinvasive.disease.cases) %>%
+  select(-FullGeoName)
+
+df_actual_2019 <- left_join(df_actual_2019, geocodes, by = "FIPS")
+
+new_actual_rows_for_counties_no_data_available_2019 <- geocodes %>%
+  anti_join(df_actual_2019, by = "FIPS") %>%
+  
+  mutate(
+    Year = 2019,
+    actual = 0
+  ) %>%
+  
+  select(Year, FIPS, actual, location)
+
+df_actual_2019 <- bind_rows(df_actual_2019, new_actual_rows_for_counties_no_data_available_2019)
+
+# sort by FIPS
+df_actual_2019 <- df_actual_2019 %>%
+  arrange(FIPS)
 
 
-
+wnv_situations <- df_actual_2020 %>%
+  # rename actual to avoid confusion with the 2019 actuals
+  select(FIPS, location, Year, actual_2020 = actual) %>%
+  
+  # join df_actual_2020 with .._2019 by FIPS
+  left_join(
+    df_actual_2019 %>% select(FIPS, actual_2019 = actual),
+    by = "FIPS"
+  ) %>%
+  
+  # if county wasnt present in 2019 set the actuals to 0
+  mutate(actual_2019 = replace_na(actual_2019, 0)) %>%
+  
+  # assign situation labels
+  mutate(
+    outbreak_2020 = actual_2020 > 0,
+    outbreak_2019 = actual_2019 > 0,
+    
+    situation = case_when(
+      !outbreak_2020 & !outbreak_2019 ~ "none",
+      outbreak_2020 & !outbreak_2019  ~ "onset",
+      outbreak_2020 & outbreak_2019   ~ "ongoing",
+      !outbreak_2020 & outbreak_2019  ~ "resolved"
+    )
+  ) %>%
+  
+  # Wir behalten nur die Spalten, die wir für den Join mit den Scores brauchen
+  select(FIPS, location, Year, situation)
 
 
 
@@ -394,10 +459,7 @@ df_predictions %>%
 
 
 
-## ------------------------------------------------------------------------------------------------------------
-## define lower threshold for binary event of a present outbreak
-## -----
-lower_infections_thresh = 0
+
 
 
 
