@@ -267,10 +267,10 @@ for (m in 1:length(model_names)) {
 
 
 ## -----
-## define lower threshold for binary event of a present outbreak
+## scoring of the predictions via RPS, twRPS, Brier-Score
 ## -----
+# define lower threshold for binary event of a present outbreak
 lower_infections_thresh = 0
-
 
 
 
@@ -279,36 +279,30 @@ models_scoring_rules <- list()
 for (m in names(predictive_probs)) {
   
   models_scoring_rules[[m]] <- predictive_probs[[m]] %>%
-    # 1. R weiß jetzt: "Ah, für jede dieser Kombinationen brauche ich am Ende genau 1 Zeile"
     group_by(FIPS, location, Year, actual) %>%
-    
-    # 2. summarise baut die finale Tabelle direkt zusammen
+    # all new (score) calculations
     summarise(
-      # Die Berechnungen, die wir schon haben:
+      
       rps = sum((CDF - as.numeric(count >= actual))^2),
       
       twrps = sum((1 / (count + 1)) * (CDF - as.numeric(count >= actual))^2),
       
-      outbreak_prob_pred = sum(PMF[count > 0]),
+      onset_prob_pred = sum(PMF[count > 0]),
       
-      # 3. NEU: Gab es in der Realität einen Ausbruch? (1 = Ja, 0 = Nein)
       actual_infection = first(actual) > lower_infections_thresh,
       
-      # 4. NEU: Brier Score für Onset (Quadrierte Abweichung der Vorhersage von der Realität)
-      brier_outbreak = (outbreak_prob_pred - actual_infection)^2,
+      brier_outbreak = (onset_prob_pred - actual_infection)^2,
       
       #########brier_outbreak_log_target,
       
-      outbreak_prob_pred_nplustwo = (outbreak_prob_pred * 1000 + 1) / 1002,
+      onset_prob_pred_nplustwo = (onset_prob_pred * 1000 + 1) / 1002,
       
       log_score_outbreak = ifelse(actual_infection == 1, 
-                               log(outbreak_prob_pred_nplustwo), 
-                               log(1 - outbreak_prob_pred_nplustwo)),
+                               log(onset_prob_pred_nplustwo), 
+                               log(1 - onset_prob_pred_nplustwo)),
       
-      .groups = "drop" # Hebt die Gruppierung am Ende sauber auf
+      .groups = "drop"
     ) %>%
-    
-    # Optional: Falls du es als klassisches Dataframe speichern willst
     as.data.frame()
 }
 
@@ -375,8 +369,6 @@ wnv_situations <- df_actual_2020 %>%
       !outbreak_2020 & outbreak_2019  ~ "resolved"
     )
   ) %>%
-  
-  # Wir behalten nur die Spalten, die wir für den Join mit den Scores brauchen
   select(FIPS, location, Year, situation)
 
 
@@ -384,6 +376,325 @@ wnv_situations <- df_actual_2020 %>%
 
 
 
+
+
+
+## -----
+## Plot Data: RPS values by infectious situation
+## -----
+models_rps_infection <- lapply(models_scoring_rules, function(m) m %>% select("FIPS", "location", "Year", "rps")) %>%
+  reduce(left_join, c("FIPS", "location", "Year"))
+names(models_rps_infection) <- c("FIPS", "location", "Year", model_names)
+models_rps_infection <- list(models_rps_infection, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
+
+n_total_counties <- nrow(models_rps_infection)
+
+models_rps_infection <- models_rps_infection %>% select(!c("FIPS", "location", "Year")) %>% group_by(situation) %>% summarise_all(sum)
+
+models_rps_infection[,2:ncol(models_rps_infection)] <- models_rps_infection[,2:ncol(models_rps_infection)] / n_total_counties # compute contributions to average CRPS
+
+
+# create ggplot data frames
+rps_year <- data.frame("RPS" = unlist(c(models_rps_infection[,2:ncol(models_rps_infection)])),
+                       "Situation" = rep(models_rps_infection$situation, ncol(models_rps_infection)-1),
+                       "Model" = rep(names(models_rps_infection)[2:ncol(models_rps_infection)], each = 4))
+
+# # print RPS contribution of "none"
+# print(colSums(models_rps_infection[1,2:ncol(models_rps_infection)] ))
+# 
+# # print overall CRPS per model
+# print(colSums(models_rps_infection[1:nrow(models_rps_infection),2:ncol(models_rps_infection)] ))
+
+
+
+
+
+## -----
+## Plot Data: twRPS values by infectious situation
+## -----
+models_twrps_infection <- lapply(models_scoring_rules, function(m) m %>% select("FIPS", "location", "Year", "twrps")) %>%
+  reduce(left_join, c("FIPS", "location", "Year"))
+names(models_twrps_infection) <- c("FIPS", "location", "Year", model_names)
+models_twrps_infection <- list(models_twrps_infection, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
+
+n_total_counties <- nrow(models_twrps_infection)
+
+models_twrps_infection <- models_twrps_infection %>% select(!c("FIPS", "location", "Year")) %>% group_by(situation) %>% summarise_all(sum)
+
+models_twrps_infection[,2:ncol(models_twrps_infection)] <- models_twrps_infection[,2:ncol(models_twrps_infection)] / n_total_counties # compute contributions to average CRPS
+
+
+# create ggplot data frames
+twrps_year <- data.frame("twRPS" = unlist(c(models_twrps_infection[,2:ncol(models_twrps_infection)])),
+                       "Situation" = rep(models_twrps_infection$situation, ncol(models_twrps_infection)-1),
+                       "Model" = rep(names(models_twrps_infection)[2:ncol(models_twrps_infection)], each = 4))
+
+
+
+## -----
+## Plot Data: Brier values by infectious situation
+## -----
+models_brier_infection <- lapply(models_scoring_rules, function(m) m %>% select("FIPS", "location", "Year", "brier_outbreak")) %>%
+  reduce(left_join, c("FIPS", "location", "Year"))
+names(models_brier_infection) <- c("FIPS", "location", "Year", model_names)
+models_brier_infection <- list(models_brier_infection, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
+
+n_total_counties <- nrow(models_brier_infection)
+
+models_brier_infection <- models_brier_infection %>% select(!c("FIPS", "location", "Year")) %>% group_by(situation) %>% summarise_all(sum)
+
+models_brier_infection[,2:ncol(models_brier_infection)] <- models_brier_infection[,2:ncol(models_brier_infection)] / n_total_counties # compute contributions to average CRPS
+
+
+# create ggplot data frames
+brier_year <- data.frame("Brier" = unlist(c(models_brier_infection[,2:ncol(models_brier_infection)])),
+                         "Situation" = rep(models_brier_infection$situation, ncol(models_brier_infection)-1),
+                         "Model" = rep(names(models_brier_infection)[2:ncol(models_brier_infection)], each = 4))
+
+
+
+
+
+## ---
+## Data for onset prediction
+## ---
+
+# dataframe to store onset probabilities in long format
+prob_models_all_situation_long <- data.frame(
+  model = character(),
+  Year = integer(),
+  FIPS = integer(),
+  onset_prob_pred = numeric(),
+  situation = character()
+)
+
+for (model_name in names(models_scoring_rules)) {
+  
+  joined_data <- models_scoring_rules[[model_name]] %>%
+    inner_join(wnv_situations, by = c("FIPS", "location", "Year")) %>%
+    mutate(model = model_name) # add model name
+  
+  # add to dataframe
+  prob_models_all_situation_long <- bind_rows(prob_models_all_situation_long, joined_data)
+}
+
+
+
+# filter for "onset" or "none" month (conflict this is previous peace)
+prev_none_prob_month_long <- prob_models_all_situation_long %>%
+  filter(situation == "none" | situation == "onset")
+
+# onset actuals binary target
+prev_none_prob_month_long_binary_actual <- prev_none_prob_month_long %>%
+  mutate(actual = ifelse(actual > lower_infections_thresh, 1, 0))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################################################################################
+## PLOTS
+################################################################################
+
+
+## -----
+## save plots in folders
+## ----
+store_plot <- FALSE
+
+## -----
+## labels, colors, textsize etc.
+## ----
+
+model_labels <- c(
+  "zero"                         = "VIEWS Zero",
+  "last"                         = "VIEWS Last",
+  "conflictology"                = "VIEWS Conflictology",
+  "conflictforecast_v2"          = "CFLT RF",
+  "submission_muchlinski_thornhill" = "MT ZeroInfl GAM",
+  "submission_final_omm"         = "RV O MM",
+  "submission_final_gpcmm"       = "RV GPC MM",
+  "submission_final_hpmm"        = "RV HP MM",
+  "unito_transformer"            = "UNITO NB Transformer",
+  "Neg_Bin_GLMM"                 = "BDT NB GLMM",
+  "tft"                          = "CCEW TFT",
+  "ShapeFinder"                  = "PACE ShapeFinder",
+  "quantile_forecast"            = "DB Quantile",
+  "boot_240"                     = "VIEWS Bootstrap",
+  "bodentien_rueter_negbin"      = "BR NB",
+  "P_GLMM"                       = "BDT P GLMM",
+  "TW_GLMM"                      = "BDT TW GLMM"
+  
+)
+
+model_labels_df <- data.frame("name_original" = names(model_labels), "name_paper" = model_labels)
+
+## -----
+## Selected models
+## -----
+
+## --
+## change this if needed. everything else is dynamic!
+# selected_models <- c("zero","last",
+#                      "conflictology","conflictforecast_v2",
+#                      "submission_muchlinski_thornhill", "submission_final_omm",
+#                      "unito_transformer", "P_GLMM")
+selected_models <- c("bodentien_rueter_negbin", "conflictforecast_v2", # replaced P_GLMM with bodentien_rueter_negbin
+                     "submission_muchlinski_thornhill", "ShapeFinder",
+                     "submission_final_omm", "unito_transformer",
+                     "conflictology", "zero")
+##
+## --
+
+
+
+selected_colors <- c(
+  "#009682",  # green
+  "#4664aa",  # blue
+  "#23a1e0",  # maygreen
+  "black",    # grey
+  "#df9b1b",  # orange
+  "#8cb63c",  # yellow
+  "#a22223",  # red
+  "#a3107c"   # purple
+)
+
+selected_model_colors <- setNames(selected_colors, selected_models)
+
+selected_model_labels <- model_labels[selected_models]
+
+## ---
+## Remaining models
+## ---
+
+# remaining_models <- setdiff(model_names, selected_models)
+#
+# remaining_colors <- c(
+#   "#009682",  # green
+#   "#4664aa",  # blue
+#   "#23a1e0",  # maygreen
+#   "black", # grey
+#   "#df9b1b",  # orange
+#   "#8cb63c",  # yellow
+#   "#a22223",  # red
+#   "#a3107c",   # purple
+#   "#51103C"    # additional color
+# )
+#
+#
+# remaining_model_colors <- setNames(remaining_colors, remaining_models)
+#
+# remaining_model_labels <- model_labels[remaining_models]
+#
+# model_colors <- c(
+#   selected_model_colors,
+#   remaining_model_colors
+# )
+
+
+
+
+theme_fontsize <- ggplot2::theme(
+  plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+  axis.title = ggplot2::element_text(size = 13),
+  axis.text = ggplot2::element_text(size = 12),
+  legend.text = element_text(size = 12),
+)
+
+theme_fontsize_large <- ggplot2::theme(
+  plot.title = ggplot2::element_text(size = 22, hjust = 0.5),
+  axis.title = ggplot2::element_text(size = 16),
+  axis.text = ggplot2::element_text(size = 16),
+  legend.text = element_text(size = 16),
+)
+
+# margin and subtitle for grid plots
+sg <- textGrob('', gp = gpar(fontsize = 4))
+margin <- unit(0.5, "line")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###################################################################################################################
+### END
+#################################################################################################################################
 # 
 # 
 # 
@@ -424,18 +735,45 @@ wnv_situations <- df_actual_2020 %>%
 
 
 
-unique(df_predictions$team)
 
 
 
 
-df_predictions %>%
-  filter(team == current_team,
-         location == "Arizona-Pinal")
 
 
 
 
+# 
+# x <- seq(from = -0.5, to = 1000, length = 1000)
+# 
+# p_lognormal_approx <- make_p_fn(ps = ps,
+#                                 qs = qs,
+#                                 tail_dist = "lnorm")
+# cdf_lognormal_approx <- p_lognormal_approx(x)
+# 
+# data.frame(
+#   x = x,
+#   y = cdf_lognormal_approx
+# ) %>%
+#   ggplot() +
+#   geom_line(
+#     mapping = aes(x = x, y = y),
+#     size = 0.8
+#   ) +
+#   geom_point(
+#     data = data.frame(q = qs, p = ps),
+#     mapping = aes(x = q, y = p),
+#     size = 1.2
+#   ) +
+#   scale_x_log10() + 
+#   ylim(0, 1) +
+#   ylab("Probability") +
+#   xlab("") +
+#   theme_bw() + 
+#   xlim(0,20)
+# 
+# 
+# 
 
 
 
@@ -443,132 +781,6 @@ df_predictions %>%
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# upper bounds of the bins (quantiles)
-qs <- c(0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 100, 150, 200, 999)
-
-
-
-
-
-### example
-example_forecast_ARS <- df_predictions$value[1:15]
-bin_probs <- example_forecast_ARS
-
-
-
-# cdf (ps)
-ps <- cumsum(bin_probs)
-# WICHTIG: Falls die Summe durch Rundungsfehler minimal über 1 liegt, auf 1 begrenzen
-ps[ps > 1] <- 1
-
-
-x <- seq(from = -0.5, to = 1000, length = 1000)
-
-p_lognormal_approx <- make_p_fn(ps = ps,
-                                qs = qs,
-                                tail_dist = "lnorm")
-cdf_lognormal_approx <- p_lognormal_approx(x)
-
-data.frame(
-  x = x,
-  y = cdf_lognormal_approx
-) %>%
-  ggplot() +
-  geom_line(
-    mapping = aes(x = x, y = y),
-    size = 0.8
-  ) +
-  geom_point(
-    data = data.frame(q = qs, p = ps),
-    mapping = aes(x = q, y = p),
-    size = 1.2
-  ) +
-  scale_x_log10() + 
-  ylim(0, 1) +
-  ylab("Probability") +
-  xlab("") +
-  theme_bw() + 
-  xlim(0,20)
-
-
-
-
-x_counts <- 0:999  # Alternativ: seq(from = 0, to = 1000, by = 1)
-
-# 2. Werte die CDF an genau diesen ganzzahligen Stellen aus
-cdf_at_counts <- p_lognormal_approx(x_counts)
-
-# Wenn du für weitere Berechnungen die Wahrscheinlichkeiten für JEDEN EINZELNEN Count brauchst
-# (also P(X=0), P(X=1), P(X=2) etc. aus der Treppenfunktion ableiten willst):
-# Das ist die Differenz zwischen dem aktuellen und dem vorherigen CDF-Wert.
-prob_at_counts <- c(cdf_at_counts[1], diff(cdf_at_counts))
-
-# 3. Speichere das Ergebnis übersichtlich in einem Data Frame
-df_counts <- data.frame(
-  Count = x_counts,
-  CDF = cdf_at_counts,       # P(X <= Count)
-  Probability = prob_at_counts # P(X == Count)
-)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-actual <- 0
-
-
-indicator <- as.numeric(x_counts >= actual)
-weight <- 1 / (x_counts + 1)
-
-# RPS discrete version of CRPS
-rps <- sum((df_counts$CDF - indicator)^2)
-# twRPS discrete version of twCRPS
-twrps <- sum(weight * (df_counts$CDF - indicator)^2)
-
-# BRIER Score for Onset meaning > 0 WNVND infections
-
-
-
-
-## für alle predictions aus der CDF (die für alle auf die selbe Art und Weise erzeugt wird) die WKs
-# für die count-valued outcomes ablesen( 0-999 ). Das ist implizit die Treppenfunktion (und somit CRPS = RPS).
-# Wie genau CDF erzeugt wird laut Johannes nicht so wichtig.
 
 
 
