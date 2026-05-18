@@ -31,6 +31,9 @@ library(forcats)
 library(distfromq)
 library(readxl)
 library(patchwork)
+library(sf)
+library(tigris)
+library(scales)
 
 
 # Erkenne das Betriebssystem
@@ -373,13 +376,6 @@ wnv_situations <- df_actual_2020 %>%
   select(FIPS, location, Year, situation)
 
 
-
-
-
-
-
-
-
 ## -----
 ## Plot Data: crps values by infectious situation
 ## -----
@@ -510,7 +506,7 @@ prev_none_prob_month_long_binary_actual <- prev_none_prob_month_long %>%
 ## -----
 ## save plots in folders
 ## ----
-store_plot <- FALSE
+store_plot <- TRUE
 
 ## -----
 ## labels, colors, textsize etc.
@@ -545,7 +541,7 @@ model_labels_df <- data.frame("name_original" = names(model_labels), "name_paper
 selected_models <- c("ARS", "LANL",
                      "MHC", "MSSM",
                      "NCSU", "NYSW",
-                     "Stanford", "UI")
+                     "Stanford", "WDH")
 ## --
 
 
@@ -620,16 +616,143 @@ margin <- unit(0.5, "line")
 
 
 ##################
-## Figure 1 a & b & c?
-## descriptive plots new
+## Figure 1a: cases per county and outbreak situation
 ##################
+# df with actuals and outbreak situations
+actual_2020_situations <- wnv_situations %>%
+  left_join(df_actual_2020, by = c("FIPS","location","Year"))
+
+# load us counties: cartographic boundaries true (shoreline), resolution 1:20 million
+us_counties <- counties(cb = TRUE, resolution = "20m", year = 2020) %>%
+  # filter s.t. contiguous US is obtained (Alaska, Hawaii, Samoa, Guam, Mariana Islands, Puerto Rico, Virgin Islands)
+  filter(!(STATEFP %in% c("02", "15", "60", "66", "69", "72", "78")))
+
+# 2. df for plot
+map_data <- actual_2020_situations %>%
+  # add leading zero if missing
+  mutate(GEOID = sprintf("%05d", as.numeric(FIPS))) %>%
+  right_join(us_counties, by = "GEOID") %>%
+  st_as_sf()# geographic map
+
+hotspot_centroids <- suppressWarnings(
+  map_data %>%
+    filter(situation %in% c("onset", "ongoing", "resolved")) %>%
+    st_centroid() # calculate the centorid of each county that is not "none"
+)
+hotspot_points <- cbind(hotspot_centroids, st_coordinates(hotspot_centroids)) %>%
+  st_drop_geometry()
 
 
+wnvnd_map_plot <- ggplot() +
+  
+  # map of US
+  geom_sf(data = map_data, aes(fill = actual), color = "white", linewidth = 0.1) +
+  
+  # shape and color of the points
+  geom_point(data = hotspot_points,
+             aes(x = X, y = Y, shape = situation, color = situation),
+             size = 1.8) +
+  
+  # Shapes of the midpoints of the counties
+  scale_shape_manual(
+    name = "Outbreak Situation", 
+    values = c(
+      "onset" = 17,       # triangle
+      "ongoing" = 15,     # square
+      "resolved" = 16     # circle
+    )
+  ) +
+  
+  # Colors of the midpoints of the counties
+  scale_color_manual(
+    name = "Outbreak Situation",
+    values = c(
+      "onset" = "black",
+      "ongoing" = "grey30",
+      "resolved" = "grey"
+    )
+  ) +
+  
+  scale_fill_gradientn(
+    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#d73027", "#a50026"), 
+    trans = "log1p",
+    name = "Cases",
+    breaks = c(0, 1, 5, 10, 50, 100),
+    na.value = "grey85"
+  ) +
+  
+  theme_void() + 
+  labs(
+    title = "West Nile Neuroinvasive Disease Cases 2020"
+  ) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 16, hjust = 0.5, margin = margin(b = 10)),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, margin = margin(b = 20)),
+    legend.title = element_text()
+  )
+
+plot(wnvnd_map_plot)
 
 
+if(store_plot == TRUE){
+  ggsave("plots_infections/wnvnd_map.png",
+         plot = wnvnd_map_plot, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
+         bg="white")
+}
 
 
+##################
+## Figure 1b: distribution of the actual cases
+##################
+hist_all <- ggplot(actual_2020_situations, aes(x = actual)) +
+  geom_histogram(binwidth = 1, fill = "#74add1", color = "white", alpha = 0.9) +
+  labs(
+    title = "All US Counties",
+    x = NULL,
+    y = "Number of Counties"
+  ) +
+  scale_y_continuous(
+    breaks = c(0, 1, 10, 100, 1000, 3000),
+    labels = label_comma()
+  ) +
+  coord_transform(y = "log1p") +
+  theme_minimal() +
+  theme(plot.title = element_text(),
+        axis.title.y = element_text(size = 14, margin = margin(r = 10)))
 
+hist_onset <- actual_2020_situations %>%
+  filter(situation == "onset") %>%
+  ggplot(aes(x = actual)) +
+  geom_histogram(binwidth = 1, fill = "#d73027", color = "white", alpha = 0.9) +
+  ylim(0,150) +
+  labs(
+    title = "Counties experiencing Outbreak",
+    x = NULL,
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text())
+
+
+hist_combined <- hist_all + hist_onset + 
+  plot_annotation(
+    title = "Distribution of WNVND Cases 2020",
+    caption = "WNVND Cases",
+    theme = theme(
+      plot.title = element_text(size = 16, hjust = 0.5),
+      plot.subtitle = element_text(size = 12, color = "grey30"),
+      plot.caption = element_text(size = 12, hjust = 0.5, margin = margin(t = 15))
+    )
+  )
+
+plot(hist_combined)
+
+if(store_plot == TRUE){
+  ggsave("plots_infections/WNVND_cases_distribution.png",
+         plot = hist_combined, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
+         bg="white")
+}
 
 
 
@@ -831,8 +954,7 @@ selected_models_brier <- all_models_brier %>%
 
 
 crps_brier_integrands_plot <- ggplot(selected_models_brier, aes(x = a, y = brier_avg, colour = model)) +
-  geom_line(size = .95, alpha = 0.8) +
-  geom_vline(xintercept = 24, size = .6, linetype = "dashed", color = "grey20") + 
+  geom_line(size = .95, alpha = 0.8) + 
   labs(
     title = "Mean Brier Score by Threshold (CRPS Integrand)",
     x = "Threshold a",
@@ -886,7 +1008,6 @@ if(store_plot == TRUE){
 ## -----------------------------------------------------------------------------
 twcrps_brier_integrands_plot <- ggplot(selected_models_brier, aes(x = log_a_plus1, y = brier_avg, colour = model)) +
   geom_line(size = .95, alpha = 0.8) +
-  geom_vline(xintercept = log(24 + 1), size = .6, linetype = "dashed", color = "grey20") + 
   labs(
     title = "Mean Brier Score by Log-Change Threshold (twCRPS Integrand)",
     x = "Threshold log(a+1)",
@@ -1266,6 +1387,8 @@ roc_reliability_plot <-
      theme_fontsize) +
   plot_layout(heights = c(1, 1))
 
+plot(roc_reliability_plot)
+
 
 if(store_plot == TRUE){
   ggsave("plots_infections/roc_reliability_selected_models_no_prev_cases.png",
@@ -1280,14 +1403,523 @@ if(store_plot == TRUE){
 
 
 
+## -----------------------------------------------------------------------------
+## BRIER: MSC-DSC-plots for previous peace
+## -----------------------------------------------------------------------------
+brier_decomposition_results <- prev_none_prob_month_long_binary_actual %>%
+  group_by(model) %>%
+  group_split(.keep = TRUE) %>%
+  set_names(map_chr(., ~ unique(.x$model))) %>%
+  map(function(df) {
+    res <- mcbdsc(df %>% select(onset_prob_pred),
+                  y = df$actual,
+                  score = "Brier_score") #'   One of: `"Brier_score"` (default), `"log_score"`, `"MR_score"`.
+    
+    estimates(res) %>%
+      mutate(model = unique(df$model))
+  })
+
+## ---
+## In-depth: 8 models
+## ---
+# filter for selected models
+brier_decomposition_results_selected <- brier_decomposition_results[selected_models]
+
+## important remark for BRIER score:
+# UNC = variance of X~Ber(p=E(y)=mean(y)) -> p(1-p)
+#p <- models_scoring_rules$boot_240$actual_conflict
+#mean(p)*(1-mean(p))
+
+# combine to one dataframe
+brier_score_decomposition_selected <- bind_rows(brier_decomposition_results_selected) %>%
+  select(model, mean_score, MCB, DSC, UNC) %>%
+  rename(MeanScore = mean_score)
+
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_selected %>%
+  mutate(score_invisible = MeanScore, gap = 0, gap1=0, gap2 = 0)
+
+# data frame with format for the barchart
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
+  arrange(MeanScore) %>%  # sort by MeanScore
+  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap, gap1, gap2),
+               names_to = "component",
+               values_to = "value") %>%
+  mutate(class = case_when(
+    component %in% c("MeanScore") ~ "SCORE",
+    component %in% c("MCB", "UNC") ~ "MCB_UNC",
+    component %in% c("DSC", "score_invisible") ~ "DSC_score", 
+    component %in% c("gap") ~ "GAP",
+    component %in% c("gap1") ~ "GAPmeanscoreDSC",
+    component %in% c("gap2") ~ "GAPdscUNC",
+  )) %>%
+  select(model, class, component, value)
+
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
+  mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
+
+
+# dataset for model orderbased on MeanScore
+brier_levs_selected <- brier_score_decomposition_barplot_selected %>%
+  filter(component == "MeanScore") %>%
+  arrange(desc(value)) %>%
+  pull(model)
+
+# data for the plot
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
+  mutate(
+    class_group = case_when(
+      class == "MCB_UNC"   ~ 1,
+      class == "DSC_score"       ~ 2,
+      class == "SCORE" ~ 3,
+      class == "GAP" ~ 4,
+      class == "GAPmeanscoreDSC" ~ 5,
+      class == "GAPdscUNC" ~ 6
+      
+    ),  
+    model = factor(model, levels = brier_levs_selected, ordered = TRUE)
+  )
+
+brier_score_decomposition_barplot_selected$model <- recode(
+  brier_score_decomposition_barplot_selected$model,
+  !!!model_labels
+)
+
+
+# set order of subbars within group
+brier_score_decomposition_barplot_selected$component <- factor(
+  brier_score_decomposition_barplot_selected$component,
+  levels = c("gap", "gap1", "gap2", "MCB", "UNC", "DSC", "score_invisible", "MeanScore")
+)
+
+# set order of sub bars within group
+brier_score_decomposition_barplot_selected$class_group <- factor(
+  brier_score_decomposition_barplot_selected$class_group,
+  levels = c(4,1,6,2,3,5)    
+)
+
+# set width of mean score bar
+mean_score_bar_selected <- 4.5
+# set width of mcb,dcs,unc bars
+msc_dsc_unc_bar_selected <- 2
+
+# width column
+brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
+  mutate(
+    wdth = case_when(
+      # MeanScore
+      class_group == 3 ~ mean_score_bar_selected, #4
+      # MCB DSC
+      class_group %in% c(1, 2) ~ msc_dsc_unc_bar_selected, #1
+      # gapswithin groups
+      class_group == 6 ~ msc_dsc_unc_bar_selected,
+      # gap between groups top
+      class_group == 5 ~ 15,
+      #gap between groups
+      class_group == 4 ~ 8 #10
+      
+    )
+  )
+
+
+brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_selected, aes(x = class_group, y = value, fill = component)) +
+  geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot_selected$wdth) +
+  facet_grid(model ~ ., switch = "y") +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
+    ##
+    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
+    ##
+    name = ""
+  ) +
+  labs(title = "MSC-DSC Mean Brier Score Decomposition for No Previous Cases") + 
+  theme_classic() +
+  scale_y_continuous(breaks = seq(0, 0.5, by = 0.01)) +
+  theme(
+    panel.spacing = unit(0, "points"),
+    strip.background = element_blank(),
+    strip.placement = "outside",
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 18),
+    axis.text.y = element_blank(),
+    axis.ticks.length.y = unit(0, "points"),
+    axis.ticks.x = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "bottom",
+    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
+    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+    legend.title = ggplot2::element_text(size = 15),
+    legend.text = ggplot2::element_text(size = 14),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.x = ggplot2::element_text(size = 14)
+  ) 
+
+brier_score_decomposition_selected
+
+
+if(store_plot == TRUE){
+  ggsave("plots_infections/brier_score_decomposition_selected_models_no_prev_cases.png",
+         plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+         bg="white")
+}
+
+
+
+
+## -----------------------------------------------------------------------------
+## LOG: MSC-DSC-plots
+## -----------------------------------------------------------------------------
+log_decomposition_results <- prev_none_prob_month_long_binary_actual %>%
+  group_by(model) %>%
+  group_split(.keep = TRUE) %>%
+  set_names(map_chr(., ~ unique(.x$model))) %>%
+  map(function(df) {
+    res <- mcbdsc(df %>% select(onset_prob_pred_nplustwo),
+                  y = df$actual,
+                  score = "log_score") #'   One of: `"Brier_score"` (default), `"log_score"`, `"MR_score"`.
+    
+    estimates(res) %>%
+      mutate(model = unique(df$model))
+  })
+
+
+## ---
+## In-depth: 8 models
+## ---
+# filter for selected models
+log_decomposition_results_selected <- log_decomposition_results[selected_models]
+
+## important remark for BRIER score:
+# UNC = variance of X~Ber(p=E(y)=mean(y)) -> p(1-p)
+#p <- models_scoring_rules$boot_240$actual_conflict
+#mean(p)*(1-mean(p))
+
+# combine to one dataframe
+log_score_decomposition_selected <- bind_rows(log_decomposition_results_selected) %>%
+  select(model, mean_score, MCB, DSC, UNC) %>%
+  rename(MeanScore = mean_score)
+
+log_score_decomposition_barplot_selected <- log_score_decomposition_selected %>%
+  mutate(score_invisible = MeanScore, gap = 0, gap1=0, gap2 = 0)
+
+# data frame with format for the barchart
+log_score_decomposition_barplot_selected <- log_score_decomposition_barplot_selected %>%
+  arrange(MeanScore) %>%  # sort by MeanScore
+  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap, gap1, gap2),
+               names_to = "component",
+               values_to = "value") %>%
+  mutate(class = case_when(
+    component %in% c("MeanScore") ~ "SCORE",
+    component %in% c("MCB", "UNC") ~ "MCB_UNC",
+    component %in% c("DSC", "score_invisible") ~ "DSC_score", 
+    component %in% c("gap") ~ "GAP",
+    component %in% c("gap1") ~ "GAPmeanscoreDSC",
+    component %in% c("gap2") ~ "GAPdscUNC",
+  )) %>%
+  select(model, class, component, value)
+
+log_score_decomposition_barplot_selected <- log_score_decomposition_barplot_selected %>%
+  mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
+
+
+# dataset for model orderbased on MeanScore
+log_levs_selected <- log_score_decomposition_barplot_selected %>%
+  filter(component == "MeanScore") %>%
+  arrange(desc(value)) %>%
+  pull(model)
+
+# data for the plot
+log_score_decomposition_barplot_selected <- log_score_decomposition_barplot_selected %>%
+  mutate(
+    class_group = case_when(
+      class == "MCB_UNC"   ~ 1,
+      class == "DSC_score"       ~ 2,
+      class == "SCORE" ~ 3,
+      class == "GAP" ~ 4,
+      class == "GAPmeanscoreDSC" ~ 5,
+      class == "GAPdscUNC" ~ 6
+      
+    ),  
+    model = factor(model, levels = log_levs_selected, ordered = TRUE)
+  )
+
+log_score_decomposition_barplot_selected$model <- recode(
+  log_score_decomposition_barplot_selected$model,
+  !!!model_labels
+)
+
+
+# set order of subbars within group
+log_score_decomposition_barplot_selected$component <- factor(
+  log_score_decomposition_barplot_selected$component,
+  levels = c("gap", "gap1", "gap2", "MCB", "UNC", "DSC", "score_invisible", "MeanScore")
+)
+
+# set order of sub bars within group
+log_score_decomposition_barplot_selected$class_group <- factor(
+  log_score_decomposition_barplot_selected$class_group,
+  levels = c(4,1,6,2,3,5)    
+)
+
+# set width of mean score bar
+mean_score_bar_selected <- 4.5
+# set width of mcb,dcs,unc bars
+msc_dsc_unc_bar_selected <- 2
+
+# width column
+log_score_decomposition_barplot_selected <- log_score_decomposition_barplot_selected %>%
+  mutate(
+    wdth = case_when(
+      # MeanScore
+      class_group == 3 ~ mean_score_bar_selected, #4
+      # MCB DSC
+      class_group %in% c(1, 2) ~ msc_dsc_unc_bar_selected, #1
+      # gapswithin groups
+      class_group == 6 ~ msc_dsc_unc_bar_selected,
+      # gap between groups top
+      class_group == 5 ~ 15,
+      #gap between groups
+      class_group == 4 ~ 8 #10
+      
+    )
+  )
+
+
+log_score_decomposition_selected <- ggplot(log_score_decomposition_barplot_selected, aes(x = class_group, y = value, fill = component)) +
+  geom_bar(stat = "identity", position = "stack", width = log_score_decomposition_barplot_selected$wdth) +
+  facet_grid(model ~ ., switch = "y") +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
+    ##
+    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
+    ##
+    name = ""
+  ) +
+  labs(title = "MSC-DSC Mean log Score Decomposition for No Previous Cases") + 
+  theme_classic() +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.05)) +
+  theme(
+    panel.spacing = unit(0, "points"),
+    strip.background = element_blank(),
+    strip.placement = "outside",
+    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 18),
+    axis.text.y = element_blank(),
+    axis.ticks.length.y = unit(0, "points"),
+    axis.ticks.x = element_blank(),
+    axis.title = element_blank(),
+    legend.position = "bottom",
+    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
+    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+    legend.title = ggplot2::element_text(size = 15),
+    legend.text = ggplot2::element_text(size = 14),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.x = ggplot2::element_text(size = 14)
+  )
+
+log_score_decomposition_selected
+
+
+if(store_plot == TRUE){
+  ggsave("plots_infections/log_score_decomposition_selected_models_no_prev_cases.png",
+         plot = log_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+         bg="white")
+}
 
 
 
 
 
+##------------------------------------------------------------------------------
+## Plot: Ranking of the selected models for different situations
+##------------------------------------------------------------------------------
+crps_rankings_selected_models <- crps_selected_models %>%
+  group_by(Model) %>%
+  summarise(total_CRPS = sum(CRPS), .groups = "drop") %>%
+  right_join(crps_selected_models, by = "Model") %>%
+  select(Model, total_CRPS) %>%
+  distinct() %>%
+  arrange(total_CRPS) %>%
+  mutate(rank_CRPS = row_number()) %>% 
+  select(Model, rank_CRPS)
+
+twcrps_rankings_selected_models <- twcrps_selected_models %>%
+  group_by(Model) %>%
+  summarise(total_twCRPS = sum(twCRPS), .groups = "drop") %>%
+  right_join(twcrps_selected_models, by = "Model") %>%
+  select(Model, total_twCRPS) %>%
+  distinct() %>%
+  arrange(total_twCRPS) %>%
+  mutate(rank_twCRPS = row_number()) %>% 
+  select(Model, rank_twCRPS)
+
+brier_no_prev_cases_rankings_selected_models <- brier_selected_models %>%
+  #filter(Situation == "onset" | Situation == "peace") %>%
+  group_by(Model) %>%
+  summarise(total_Brier = sum(BRIER), .groups = "drop") %>%
+  right_join(brier_selected_models, by = "Model") %>%
+  select(Model, total_Brier) %>%
+  distinct() %>%
+  arrange(total_Brier) %>%
+  mutate(rank_Brier = row_number()) %>% 
+  select(Model, rank_Brier)
+
+
+model_rankings <- crps_rankings_selected_models %>%
+  left_join(twcrps_rankings_selected_models, by = "Model") %>%
+  left_join(brier_no_prev_cases_rankings_selected_models, by = "Model")
+
+model_rankings <- model_rankings %>%
+  rename(CRPS = rank_CRPS,
+         twCRPS = rank_twCRPS,
+         BRIER_Onset = rank_Brier)
 
 
 
+# -----------------------------
+# plateau-smoothstep function
+# -----------------------------
+smoothstep <- function(u) 3*u^2 - 2*u^3
+
+plateau_step <- function(t, flat = 0.42) {
+  flat <- pmin(pmax(flat, 0), 0.49)
+  ifelse(
+    t <= flat, 0,
+    ifelse(t >= 1 - flat, 1, smoothstep((t - flat) / (1 - 2 * flat)))
+  )
+}
+
+make_segment <- function(y0, y1, n = 160, flat = 0.42) {
+  x <- seq(0, 1, length.out = n)
+  s <- plateau_step(x, flat = flat)
+  tibble(x = x, y = y0 + (y1 - y0) * s)
+}
+
+flat <- 0.33
+
+left_curves <- model_rankings %>%
+  rowwise() %>%
+  do({
+    seg <- make_segment(.$CRPS, .$twCRPS, flat = flat)
+    seg$Model <- .$Model
+    seg
+  }) %>% ungroup()
+
+right_curves <- model_rankings %>%
+  rowwise() %>%
+  do({
+    seg <- make_segment(.$twCRPS, .$BRIER_Onset, flat = flat)
+    seg$Model <- .$Model
+    seg
+  }) %>% ungroup()
+
+
+left_pts  <- model_rankings %>% transmute(Model, x = 0, y = CRPS, x2 = 1, y2 = twCRPS)
+right_pts <- model_rankings %>% transmute(Model, x = 0, y = twCRPS, x2 = 1, y2 = BRIER_Onset)
+
+base_theme <- theme_classic() +
+  theme(
+    axis.title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    plot.title = element_text(size = 18, hjust = 0.5),
+    axis.text.y = element_text(size = 14),
+    strip.background = element_blank(),
+    
+    axis.line = element_blank(),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.line.y.left = element_blank(),
+    axis.line.y.right = element_blank()
+  )
+
+
+ticks <- data.frame(y = 1:8)
+tick_len <- 0.03
+num_off  <- 0.055
+
+axis_col <- "grey35"
+axis_lwd <- 0.5
+
+selected_colors_Model <- selected_colors
+names(selected_colors_Model) <- model_labels[names(selected_colors)]
+
+# ---------------- LEFT: CRPS (x=0) + twCRPS (x=1)
+p_left <- ggplot() +
+  geom_vline(xintercept = 0, colour = axis_col, linewidth = axis_lwd) +
+  geom_vline(xintercept = 1, colour = axis_col, linewidth = axis_lwd) +
+  
+  geom_segment(
+    data = ticks,
+    aes(x = 0, xend = 0 - tick_len, y = y, yend = y),
+    colour = axis_col, linewidth = 0.4
+  ) +
+  geom_text(
+    data = ticks,
+    aes(x = 0 - num_off, y = y, label = y),
+    hjust = 1, colour = axis_col, size = 4
+  ) +
+  
+  geom_segment(
+    data = ticks,
+    aes(x = 1, xend = 1 - tick_len, y = y, yend = y),
+    colour = axis_col, linewidth = 0.35
+  ) +
+  
+  geom_line(data = left_curves, aes(x = x, y = y, color = Model), linewidth = 1.1) +
+  geom_point(data = left_pts,  aes(x = 0, y = y,  color = Model), size = 2) +
+  geom_point(data = left_pts,  aes(x = 1, y = y2, color = Model), size = 2) +
+  geom_text(data = model_rankings, aes(x = -0.15, y = CRPS, label = Model, color = Model),
+            hjust = 1, size = 5) +
+  annotate("text", x = 0 - 0.012, y = 0.6, label = "CRPS",
+           fontface = "bold", hjust = 1, colour = axis_col, size = 5) +
+  annotate("text", x = 1 - 0.012, y = 0.6, label = "twCRPS",
+           fontface = "bold", hjust = 1, colour = axis_col, size = 5) +
+  scale_color_manual(values = selected_colors_Model, guide = "none") +
+  scale_x_continuous(limits = c(-0.15, 1), breaks = NULL, expand = c(0, 0)) +
+  scale_y_reverse(limits = c(8.4, 0.6), breaks = NULL) +
+  coord_cartesian(clip = "off") +
+  base_theme +
+  theme(plot.margin = margin(10, 0, 10, 160))
+
+# ---------------- RIGHT: twCRPS (x=0) + BRIER (x=1)
+p_right <- ggplot() +
+  geom_vline(xintercept = 0, colour = axis_col, linewidth = axis_lwd) +
+  geom_vline(xintercept = 1, colour = axis_col, linewidth = axis_lwd) +
+  
+  geom_segment(
+    data = ticks,
+    aes(x = 1, xend = 1 + tick_len, y = y, yend = y),
+    colour = axis_col, linewidth = 0.4
+  ) +
+  geom_text(
+    data = ticks,
+    aes(x = 1 + num_off, y = y, label = y),
+    hjust = 0, colour = axis_col, size = 4
+  ) +
+  
+  geom_line(data = right_curves, aes(x = x, y = y, color = Model), linewidth = 1.1) +
+  geom_point(data = right_pts,  aes(x = 0, y = y,  color = Model), size = 2) +
+  geom_point(data = right_pts,  aes(x = 1, y = y2, color = Model), size = 2) +
+  annotate("text", x = 1 - 0.012, y = 0.6, label = "Brier Score",
+           fontface = "bold", hjust = 1, colour = axis_col, size = 5) +
+  scale_color_manual(values = selected_colors_Model, guide = "none") +
+  scale_x_continuous(limits = c(0, 1.1), breaks = NULL, expand = c(0, 0)) +
+  scale_y_reverse(limits = c(8.4, 0.6), breaks = NULL) +
+  base_theme +
+  theme(plot.margin = margin(10, 80, 10, -90))
+
+selected_models_ranking_plot <- (p_left | p_right) + plot_layout(widths = c(1.05, 1))
+
+plot(selected_models_ranking_plot)
+
+
+if(store_plot == TRUE){
+  ggsave("plots_infections/selected_models_ranking_plot.png",
+         plot = selected_models_ranking_plot, width = 1.0 * 4222, height = 1.0 * 2000, dpi = 300, units = "px",
+         bg="white")
+}
 
 
 
@@ -1334,25 +1966,6 @@ if(store_plot == TRUE){
 #   CDF = cdf_at_counts,       # P(X <= Count)
 #   Probability = prob_at_counts # P(X == Count)
 # )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # 
 # x <- seq(from = -0.5, to = 1000, length = 1000)
 # 
