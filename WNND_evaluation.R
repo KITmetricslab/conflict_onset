@@ -219,6 +219,10 @@ expand_prediction <- function(bin_probs) {
   bin_probs_safe <- bin_probs_safe / sum(bin_probs_safe)
   
   ps <- cumsum(bin_probs_safe)
+  ##########################
+  ## ebenfalls prüfen
+  ##ps[length(ps)] <- 1 ------ sind alle ps davor kleiner 1??
+  ##ps <- ps / ps[length(ps)]------ alternativ?
   
   ###############################################
   
@@ -245,29 +249,45 @@ expand_prediction <- function(bin_probs) {
 }
 
 # fill 
-for (m in 1:length(model_names)) { 
-  
-  current_team <- model_names[m]
-  
-  df_model <- df_predictions %>%
-    filter(team == current_team)
-  
-  # group by (location, FIPS, Year, actual)
-  # isolate 15 rows (predictions per bin), 
-  # apply 'expand_prediction' to column 'value' 
-  df_expanded <- df_model %>%
-    group_by(location, FIPS, Year, actual) %>%
-    reframe(expand_prediction(value)) %>%
-    ungroup()
-  
-  # order df
-  df_expanded <- df_expanded %>%
-    select(location, FIPS, count, Year, PMF, CDF, actual)
-  
-  predictive_probs[[current_team]] <- as.data.frame(df_expanded)
-}
+# for (m in 1:length(model_names)) { 
+#   
+#   current_team <- model_names[m]
+#   
+#   # Wir lassen R mit dir sprechen, damit du weißt, wo es steht!
+#   cat(sprintf("[%s] Verarbeite Modell %d von %d: %s ...\n", 
+#               Sys.time(), m, length(model_names), current_team))
+#   
+#   
+#   df_model <- df_predictions %>%
+#     filter(team == current_team)
+#   
+#   if (nrow(df_model) == 0) {
+#     cat("-> Keine Daten für dieses Modell. Überspringe...\n")
+#     next
+#   }
+#   
+#   # group by (location, FIPS, Year, actual)
+#   # isolate 15 rows (predictions per bin), 
+#   # apply 'expand_prediction' to column 'value' 
+#   df_expanded <- df_model %>%
+#     group_by(location, FIPS, Year, actual) %>%
+#     reframe(expand_prediction(value)) %>%
+#     ungroup()
+#   
+#   # order df
+#   df_expanded <- df_expanded %>%
+#     select(location, FIPS, count, Year, PMF, CDF, actual)
+#   
+#   predictive_probs[[current_team]] <- as.data.frame(df_expanded)
+# }
+# save(predictive_probs, file = "output/predictive_provs_WNVND.RData")
+load("output/predictive_provs_WNVND.RData")
 
-
+# df_all_predictions <- bind_rows(predictive_probs, .id = "model")
+# write_parquet(df_all_predictions, paste0("output/", "all_predictive_probs_expanded.parquet"))
+# df_all_predictions <- read_parquet(paste0("output/", "all_predictive_probs_expanded.parquet"))
+# predictive_probs <- split(df_all_predictions, df_all_predictions$model)
+# predictive_probs <- lapply(predictive_probs, function(df) select(df, -model))
 
 
 ## -----
@@ -507,6 +527,8 @@ prev_none_prob_month_long_binary_actual <- prev_none_prob_month_long %>%
 ## save plots in folders
 ## ----
 store_plot <- TRUE
+# folder to store plots
+folder <- "plots_infections_updated" #plots_infections
 
 ## -----
 ## labels, colors, textsize etc.
@@ -696,7 +718,7 @@ plot(wnvnd_map_plot)
 
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/wnvnd_map.png",
+  ggsave(paste0(folder,"/","wnvnd_map.png"),
          plot = wnvnd_map_plot, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
          bg="white")
 }
@@ -749,7 +771,7 @@ hist_combined <- hist_all + hist_onset +
 plot(hist_combined)
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/WNVND_cases_distribution.png",
+  ggsave(paste0(folder,"/","WNVND_cases_distribution.png"),
          plot = hist_combined, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
          bg="white")
 }
@@ -801,7 +823,7 @@ crps_infections_situation_plot <- crps_selected_models %>%
 crps_infections_situation_plot
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/crps_infections_situation.png",
+  ggsave(paste0(folder,"/","crps_infections_situation.png"),
          plot = crps_infections_situation_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
          bg="white")
 }
@@ -854,7 +876,7 @@ twcrps_infections_situation_plot <- twcrps_selected_models %>%
 twcrps_infections_situation_plot
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/twcrps_infections_situation.png",
+  ggsave(paste0(folder,"/","twcrps_infections_situation.png"),
          plot = twcrps_infections_situation_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
          bg="white")
 }
@@ -906,7 +928,7 @@ brier_infections_situation_plot <- brier_selected_models %>%
 brier_infections_situation_plot
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/brier_infections_situation.png",
+  ggsave(paste0(folder,"/","brier_infections_situation.png"),
          plot = brier_infections_situation_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
          bg="white")
 }
@@ -974,7 +996,7 @@ crps_brier_integrands_plot
 
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/crps_brier_integrands_plot.png",
+  ggsave(paste0(folder,"/","crps_brier_integrands_plot.png"),
          plot = crps_brier_integrands_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
          bg="white")
 }
@@ -1026,7 +1048,7 @@ twcrps_brier_integrands_plot
 
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/twcrps_brier_integrands_plot.png",
+  ggsave(paste0(folder,"/","twcrps_brier_integrands_plot.png"),
          plot = twcrps_brier_integrands_plot, width = 1.0 * 3200, height = 1.0 * 1300, dpi = 300, units = "px",
          bg="white")
 }
@@ -1099,7 +1121,7 @@ roc_curve_selected_models <- autoplot(mm_eval, curvetype = "ROC") +
 roc_curve_selected_models
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/roc_curve_selected_models_prev_none.png",
+  ggsave(paste0(folder,"/","roc_curve_selected_models_prev_none.png"),
          plot = roc_curve_selected_models, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
          bg="white")
 }
@@ -1369,7 +1391,7 @@ plot(reliability_grid)
 
 if (store_plot == TRUE) {
   ggsave(
-    "plots_infections/reliability_diagram_selected_models_no_prev_cases.png",
+    paste0(folder,"/","reliability_diagram_selected_models_no_prev_cases.png"),
     plot = reliability_grid,
     width = 1.0 * 3000, height = 1.0 * 1800, dpi = 300, units = "px",
     bg = "white"
@@ -1391,7 +1413,7 @@ plot(roc_reliability_plot)
 
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/roc_reliability_selected_models_no_prev_cases.png",
+  ggsave(paste0(folder,"/","roc_reliability_selected_models_no_prev_cases.png"),
          plot = roc_reliability_plot, width = 1.2 * 1000, height = 1.2 * 2000, dpi = 300, units = "px",
          bg="white")
 }
@@ -1558,7 +1580,7 @@ brier_score_decomposition_selected
 
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/brier_score_decomposition_selected_models_no_prev_cases.png",
+  ggsave(paste0(folder,"/","brier_score_decomposition_selected_models_no_prev_cases.png"),
          plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
          bg="white")
 }
@@ -1722,7 +1744,7 @@ log_score_decomposition_selected
 
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/log_score_decomposition_selected_models_no_prev_cases.png",
+  ggsave(paste0(folder,"/","log_score_decomposition_selected_models_no_prev_cases.png"),
          plot = log_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
          bg="white")
 }
@@ -1916,7 +1938,7 @@ plot(selected_models_ranking_plot)
 
 
 if(store_plot == TRUE){
-  ggsave("plots_infections/selected_models_ranking_plot.png",
+  ggsave(paste0(folder,"/","selected_models_ranking_plot.png"),
          plot = selected_models_ranking_plot, width = 1.0 * 4222, height = 1.0 * 2000, dpi = 300, units = "px",
          bg="white")
 }
