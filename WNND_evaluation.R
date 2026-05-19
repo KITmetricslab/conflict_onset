@@ -283,6 +283,9 @@ expand_prediction <- function(bin_probs) {
 # save(predictive_probs, file = "output/predictive_provs_WNVND.RData")
 load("output/predictive_provs_WNVND.RData")
 
+
+
+
 # df_all_predictions <- bind_rows(predictive_probs, .id = "model")
 # write_parquet(df_all_predictions, paste0("output/", "all_predictive_probs_expanded.parquet"))
 # df_all_predictions <- read_parquet(paste0("output/", "all_predictive_probs_expanded.parquet"))
@@ -317,9 +320,16 @@ for (m in names(predictive_probs)) {
       
       brier_outbreak = (onset_prob_pred - actual_infection)^2,
       
-      #########brier_outbreak_log_target,
-      
+      #### überprüfen
       onset_prob_pred_nplustwo = (onset_prob_pred * 1000 + 1) / 1002,
+      #######
+      ### clipping?
+      # # Wahrscheinlichkeit auf [1e-15, 1 - 1e-15] begrenzen
+      # onset_prob_pred_safe = pmax(pmin(onset_prob_pred, 1 - 1e-15), 1e-15),
+      # 
+      # log_score_outbreak = ifelse(actual_infection == 1, 
+      #                             log(onset_prob_pred_safe), 
+      #                             log(1 - onset_prob_pred_safe))
       
       log_score_outbreak = ifelse(actual_infection == 1, 
                                log(onset_prob_pred_nplustwo), 
@@ -632,13 +642,8 @@ margin <- unit(0.5, "line")
 
 
 
-
-
-
-
-
 ##################
-## Figure 1a: cases per county and outbreak situation
+## Figure 1a: cases per county and outbreak situation 2020
 ##################
 # df with actuals and outbreak situations
 actual_2020_situations <- wnv_situations %>%
@@ -743,21 +748,30 @@ hist_all <- ggplot(actual_2020_situations, aes(x = actual)) +
   theme(plot.title = element_text(),
         axis.title.y = element_text(size = 14, margin = margin(r = 10)))
 
-hist_onset <- actual_2020_situations %>%
-  filter(situation == "onset") %>%
-  ggplot(aes(x = actual)) +
-  geom_histogram(binwidth = 1, fill = "#d73027", color = "white", alpha = 0.9) +
-  ylim(0,150) +
+hist_onset_ongoing <- actual_2020_situations %>%
+  filter(situation %in% c("onset","ongoing")) %>%
+  ggplot(aes(x = actual, fill = situation)) +
+  geom_histogram(binwidth = 1, color = "white", alpha = 0.9) +
+  scale_fill_manual(
+    name = "Outbreak Status",
+    values = c("onset" = "#4664aa", 
+               "ongoing" = "#a22223")
+  ) +
   labs(
-    title = "Counties experiencing Outbreak",
+    title = "Counties experiencing Infections",
     x = NULL,
     y = NULL
   ) +
+  # scale_y_continuous(
+  #   breaks = c(0, 1, 10, 50, 100, 150),
+  #   labels = label_comma()
+  # ) +
+  # coord_transform(y = "log1p") +
   theme_minimal() +
   theme(plot.title = element_text())
 
 
-hist_combined <- hist_all + hist_onset + 
+hist_combined <- hist_all + hist_onset_ongoing + 
   plot_annotation(
     title = "Distribution of WNVND Cases 2020",
     caption = "WNVND Cases",
@@ -778,12 +792,96 @@ if(store_plot == TRUE){
 
 
 
+
+## -----------------------------------------------------------------------------
+## Figure 2a: Crps per county and outbreak situation
+## -----------------------------------------------------------------------------
+crps_per_county <- lapply(models_scoring_rules, function(m) m %>% select("FIPS", "location", "Year", "crps")) %>%
+  reduce(left_join, c("FIPS", "location", "Year"))
+names(crps_per_county) <- c("FIPS", "location", "Year", model_names)
+crps_per_county <- list(crps_per_county, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
+
+crps_per_county <- crps_per_county %>%
+  mutate(sum_CRPS = rowSums(across(4:17), na.rm = TRUE)) %>%
+  select(-c(4:17))
+  
+map_data_crps <- crps_per_county %>%
+  # add leading zero if missing
+  mutate(GEOID = sprintf("%05d", as.numeric(FIPS))) %>%
+  right_join(us_counties, by = "GEOID") %>%
+  st_as_sf()# geographic map
+
+hotspot_centroids_crps <- suppressWarnings(
+  map_data_crps %>%
+    filter(situation %in% c("onset", "ongoing", "resolved")) %>%
+    st_centroid() # calculate the centorid of each county that is not "none"
+)
+hotspot_points_crps <- cbind(hotspot_centroids_crps, st_coordinates(hotspot_centroids_crps)) %>%
+  st_drop_geometry()
+
+
+wnvnd_crps_map_plot <- ggplot() +
+  
+  # map of US
+  geom_sf(data = map_data_crps, aes(fill = sum_CRPS), color = "white", linewidth = 0.1) +
+  
+  # shape and color of the points
+  geom_point(data = hotspot_points_crps,
+             aes(x = X, y = Y, shape = situation, color = situation),
+             size = 1.8) +
+  
+  # Shapes of the midpoints of the counties
+  scale_shape_manual(
+    name = "Outbreak Situation", 
+    values = c(
+      "onset" = 17,       # triangle
+      "ongoing" = 15,     # square
+      "resolved" = 16     # circle
+    )
+  ) +
+  
+  # Colors of the midpoints of the counties
+  scale_color_manual(
+    name = "Outbreak Situation",
+    values = c(
+      "onset" = "black",
+      "ongoing" = "grey30",
+      "resolved" = "grey"
+    )
+  ) +
+  
+  scale_fill_gradientn(
+    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#d73027", "#a50026"), 
+    trans = "log1p",
+    name = "Cases",
+    breaks = c(30, 50, 200, 400, 600),
+    na.value = "grey85"
+  ) +
+  
+  theme_void() + 
+  labs(
+    title = "Sum of CRPS across all Models for WNND Cases 2020"
+  ) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 16, hjust = 0.5, margin = margin(b = 10)),
+    plot.subtitle = element_text(size = 12, hjust = 0.5, margin = margin(b = 20)),
+    legend.title = element_text()
+  )
+
+plot(wnvnd_crps_map_plot)
+
+
+if(store_plot == TRUE){
+  ggsave(paste0(folder,"/","wnvnd_crps_map.png"),
+         plot = wnvnd_crps_map_plot, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
+         bg="white")
+}
+
+
 ## -----------------------------------------------------------------------------
 ## Figure 2b: Crps decomposition
 ## -----------------------------------------------------------------------------
-## ---
-## Selected models
-## ---
 crps_selected_models <- crps_year %>% filter(Model %in% selected_models) %>%
   mutate("Model_orig" = Model)
 
@@ -797,7 +895,8 @@ crps_infections_situation_plot <- crps_selected_models %>%
   group_by(Model) %>%
   summarise(total_crps = sum(CRPS), .groups = "drop") %>%
   right_join(crps_selected_models, by = "Model") %>%
-  mutate(Model = fct_reorder(Model, total_crps, .desc = TRUE)) %>%
+  mutate(Model = fct_reorder(Model, total_crps, .desc = TRUE),
+         Situation = factor(Situation, levels = c("ongoing", "resolved", "onset", "none"))) %>%
   ggplot(aes(fill = Situation, y = Model, x = CRPS)) +
   geom_bar(position = "stack", stat = "identity") +
   labs(title = "Contribution to the Mean CRPS per Infectious Situation",
@@ -830,6 +929,23 @@ if(store_plot == TRUE){
 
 
 
+## -----
+## counties per category
+## -----
+# wichtig: CRPS dominated by high infectious counties?
+# auf plot erstmal nicht erkennbar, da rote zu blaue balken ausgeglichen
+# wenn die anzahl an counties mit no previous cases aber sehr gering ist
+# spricht das trotzdem für die betonung des CRPS auf einige wenige Counties
+# mit hohen Fallzahlen
+counties_per_situation <- wnv_situations %>%
+  summarise(onset = sum(situation == "onset", na.rm = TRUE),
+            ongoing = sum(situation == "ongoing", na.rm = TRUE),
+            resolved = sum(situation == "resolved", na.rm = TRUE),
+            none = sum(situation == "none", na.rm = TRUE))
+  
+
+
+
 
 ## -----------------------------------------------------------------------------
 ## Figure 2c: twCrps decomposition
@@ -850,7 +966,8 @@ twcrps_infections_situation_plot <- twcrps_selected_models %>%
   group_by(Model) %>%
   summarise(total_twcrps = sum(twCRPS), .groups = "drop") %>%
   right_join(twcrps_selected_models, by = "Model") %>%
-  mutate(Model = fct_reorder(Model, total_twcrps, .desc = TRUE)) %>%
+  mutate(Model = fct_reorder(Model, total_twcrps, .desc = TRUE),
+         Situation = factor(Situation, levels = c("ongoing", "resolved", "onset", "none"))) %>%
   ggplot(aes(fill = Situation, y = Model, x = twCRPS)) +
   geom_bar(position = "stack", stat = "identity") +
   labs(title = "Contribution to the Mean twCRPS per Infectious Situation",
@@ -902,7 +1019,8 @@ brier_infections_situation_plot <- brier_selected_models %>%
   group_by(Model) %>%
   summarise(total_brier = sum(BRIER), .groups = "drop") %>%
   right_join(brier_selected_models, by = "Model") %>%
-  mutate(Model = fct_reorder(Model, total_brier, .desc = TRUE)) %>%
+  mutate(Model = fct_reorder(Model, total_brier, .desc = TRUE),
+         Situation = factor(Situation, levels = c("ongoing", "resolved", "onset", "none"))) %>%
   ggplot(aes(fill = Situation, y = Model, x = BRIER)) +
   geom_bar(position = "stack", stat = "identity") +
   labs(title = "Contribution to the Mean Brier-Score per Infectious Situation",
