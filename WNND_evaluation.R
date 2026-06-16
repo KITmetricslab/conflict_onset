@@ -34,6 +34,7 @@ library(patchwork)
 library(sf)
 library(tigris)
 library(scales)
+library(ggbreak)
 
 
 # Erkenne das Betriebssystem
@@ -555,7 +556,7 @@ model_labels <- c(
   "Stanford" = "Stanford",
   "UA" = "UA",
   "UCD" = "UCD",
-  "UI" = "UI",
+  "UI" = "Naive Baseline",
   "UI-NCSA" = "UI-NCSA",
   "WDH" = "WDH"
   
@@ -571,7 +572,7 @@ model_labels_df <- data.frame("name_original" = names(model_labels), "name_paper
 ## change this if needed. everything else is dynamic!
 selected_models <- c("ARS", "LANL",
                      "MHC", "MSSM",
-                     "NCSU", "NYSW",
+                     "UI", "NYSW",
                      "Stanford", "WDH")
 ## --
 
@@ -970,6 +971,7 @@ crps_infections_situation_plot <- crps_selected_models %>%
                                "resolved" = resolved_label,
                                "onset" = onset_label,
                                "none" = none_label)) +
+  scale_x_break(c(1.5, 22.5), scales = "fixed") +
   theme_minimal() +
   theme(
     panel.grid.major.y = element_blank(),
@@ -986,6 +988,7 @@ if(store_plot == TRUE){
          plot = crps_infections_situation_plot, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
          bg="white")
 }
+
 
 
 
@@ -1141,6 +1144,7 @@ twcrps_infections_situation_plot <- twcrps_selected_models %>%
                                "resolved" = resolved_label,
                                "onset" = onset_label,
                                "none" = none_label)) +
+  scale_x_break(c(0.4, 2.7), scales = "fixed") +
   theme_minimal() +
   theme(
     panel.grid.major.y = element_blank(),
@@ -1194,6 +1198,7 @@ brier_infections_situation_plot <- brier_selected_models %>%
                                "resolved" = resolved_label,
                                "onset" = onset_label,
                                "none" = none_label)) +
+  scale_x_break(c(0.2, 0.65), scales = "fixed") +
   theme_minimal() +
   theme(
     panel.grid.major.y = element_blank(),
@@ -1834,7 +1839,7 @@ brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_s
   ) +
   labs(title = "Mean Brier Score Decomposition") + 
   theme_classic() +
-  scale_y_continuous(breaks = seq(0, 0.5, by = 0.01)) +
+  scale_y_continuous(breaks = seq(0, 0.8, by = 0.1)) +
   theme(
     panel.spacing = unit(0, "points"),
     strip.background = element_blank(),
