@@ -516,10 +516,9 @@ prev_none_prob_month_long <- prob_models_all_situation_long %>%
 prev_none_prob_month_long_binary_actual <- prev_none_prob_month_long %>%
   mutate(actual = ifelse(actual > lower_infections_thresh, 1, 0))
 
-
-
-
-
+# actuals binary target
+prob_models_all_situation_long_binary_actual <- prob_models_all_situation_long %>%
+  mutate(actual = ifelse(actual > lower_infections_thresh, 1, 0))
 
 
 
@@ -538,7 +537,7 @@ prev_none_prob_month_long_binary_actual <- prev_none_prob_month_long %>%
 ## ----
 store_plot <- TRUE
 # folder to store plots
-folder <- "plots_infections" #plots_infections_updated
+folder <- "plots_infections"
 
 ## -----
 ## labels, colors, textsize etc.
@@ -556,7 +555,7 @@ model_labels <- c(
   "Stanford" = "Stanford",
   "UA" = "UA",
   "UCD" = "UCD",
-  "UI" = "Naive Baseline",
+  "UI" = "Naive",
   "UI-NCSA" = "UI-NCSA",
   "WDH" = "WDH"
   
@@ -1346,6 +1345,8 @@ if(store_plot == TRUE){
 ##
 roc_data_prev_none <- prev_none_prob_month_long_binary_actual
 
+# used to check wether AUC matches AUC in Appendix Fig S6 (matches!)
+#roc_data_prev_none <- prob_models_all_situation_long_binary_actual
 
 ## ---
 ## In-depth: 8 models
