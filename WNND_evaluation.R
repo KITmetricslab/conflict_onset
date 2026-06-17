@@ -675,6 +675,7 @@ hotspot_centroids <- suppressWarnings(
 hotspot_points <- cbind(hotspot_centroids, st_coordinates(hotspot_centroids)) %>%
   st_drop_geometry()
 
+max(map_data$actual)
 
 wnvnd_map_plot <- ggplot() +
   
@@ -717,11 +718,13 @@ wnvnd_map_plot <- ggplot() +
   ) +
   
   scale_fill_gradientn(
-    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#d73027", "#a50026"), 
+    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#a50026"), 
     trans = "log1p",
     name = "Cases",
-    breaks = c(0, 1, 5, 10, 50, 100),
-    na.value = "grey85"
+    breaks = c(0, 1, 3, 10, 30, 120), 
+    na.value = "white",
+    limits = c(0, 120),
+    oob = scales::squish
   ) +
   
   theme_void() + 
@@ -764,8 +767,71 @@ test <- actual_2020_situations %>%
 length(test$actual)
 
 
+# case counts La etc.
+df_actual_2019[df_actual_2019$FIPS == 6037, ]
+df_actual_2020[df_actual_2020$FIPS == 6037, ]
+
+df_actual_2019[df_actual_2019$FIPS == 04013, ]
+df_actual_2020[df_actual_2020$FIPS == 04013, ]
+
+
 ##################
-## Figure 1b: distribution of the actual cases
+## Figure 1b:cases per county 2019
+##################
+# 2. df for plot
+map_data <- df_actual_2019 %>%
+  # add leading zero if missing
+  mutate(GEOID = sprintf("%05d", as.numeric(FIPS))) %>%
+  right_join(us_counties, by = "GEOID") %>%
+  st_as_sf()# geographic map
+
+max(map_data$actual)
+
+wnvnd_map_plot_2019 <- ggplot() +
+  
+  # map of US
+  geom_sf(data = map_data, aes(fill = actual), color = "white", linewidth = 0.1) +
+  
+  scale_fill_gradientn(
+    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#a50026"), 
+    trans = "log1p",
+    name = "Cases",
+    breaks = c(0, 1, 3, 10, 30, 120), 
+    na.value = "white",
+    limits = c(0, 120),
+    oob = scales::squish
+  ) +
+  
+  theme_void() + 
+  labs(
+    title = "WNND Cases 2019"
+  ) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 18, hjust = 0.5, margin = margin(b = 10)),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    
+    legend.spacing.y = unit(0.5, "cm")
+  ) +
+  guides(
+    shape = guide_legend(order = 1),
+    color = guide_legend(order = 1),
+    fill  = guide_colorbar(order = 2)
+  )
+
+plot(wnvnd_map_plot_2019)
+
+if(store_plot == TRUE){
+  ggsave(paste0(folder,"/","WNND_2019_map.png"),
+         plot = wnvnd_map_plot_2019, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
+         bg="white")
+}
+
+
+
+##################
+## Figure 1c: distribution of the actual cases 2020
 ##################
 # Main-Plot: only counties cases>0
 hist_main <- actual_2020_situations %>%
@@ -823,13 +889,13 @@ hist_inset <- ggplot(actual_2020_situations, aes(x = actual)) +
 
 # Picture in picture
 hist_combined <- hist_main + 
-  inset_element(hist_inset, left = 0.5, bottom = 0.5, right = 0.98, top = 0.98)
+  inset_element(hist_inset, left = 0.3, bottom = 0.3, right = 0.98, top = 0.98)
 
 plot(hist_combined)
 
 if(store_plot == TRUE){
   ggsave(paste0(folder,"/","WNND_cases_distribution.png"),
-         plot = hist_combined, width = 0.9 * 3500, height = 0.8 * 2000, dpi = 300, units = "px",
+         plot = hist_combined, width = 0.9 * 3500, height = 0.65 * 2000, dpi = 300, units = "px",
          bg="white")
 }
 
@@ -845,7 +911,7 @@ names(crps_per_county) <- c("FIPS", "location", "Year", model_names)
 crps_per_county <- list(crps_per_county, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
 
 crps_per_county <- crps_per_county %>%
-  mutate(sum_CRPS = rowSums(across(4:17), na.rm = TRUE)) %>%
+  mutate(sum_CRPS = rowMeans(across(4:17), na.rm = TRUE)) %>%
   select(-c(4:17))
   
 map_data_crps <- crps_per_county %>%
@@ -862,6 +928,7 @@ hotspot_centroids_crps <- suppressWarnings(
 hotspot_points_crps <- cbind(hotspot_centroids_crps, st_coordinates(hotspot_centroids_crps)) %>%
   st_drop_geometry()
 
+max(map_data_crps$sum_CRPS)
 
 wnvnd_crps_map_plot <- ggplot() +
   
@@ -904,16 +971,18 @@ wnvnd_crps_map_plot <- ggplot() +
   ) +
   
   scale_fill_gradientn(
-    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#d73027", "#a50026"), 
+    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#a50026"), 
     trans = "log1p",
     name = "CRPS",
-    breaks = c(30, 50, 200, 400, 600),
-    na.value = "white"
+    breaks = c(0, 1, 3, 10, 30, 120), 
+    na.value = "white",
+    limits = c(0, 120),
+    oob = scales::squish
   ) +
   
   theme_void() + 
   labs(
-    title = "Sum of CRPS Across All Models for WNND Cases 2020"
+    title = "Mean CRPS Across All Models for WNND Cases 2020"
   ) +
   theme(
     legend.position = "right",
@@ -937,6 +1006,33 @@ if(store_plot == TRUE){
          plot = wnvnd_crps_map_plot, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
          bg="white")
 }
+
+
+
+# 1. Daten für die Pareto-Analyse vorbereiten
+top_n_counties <- 5
+pareto_data <- map_data_crps %>%
+  # Wir nehmen den Mean CRPS oder Sum CRPS (je nachdem was du in der Map nutzt)
+  mutate(is_top = ifelse(rank(desc(sum_CRPS)) <= top_n_counties, 
+                         as.character(location), "Other Counties")) %>%
+  group_by(is_top) %>%
+  summarise(total_CRPS = sum(sum_CRPS), .groups = "drop") %>%
+  # Sortierung für den Plot
+  mutate(is_top = fct_reorder(is_top, total_CRPS, .desc = TRUE))
+
+# 2. Plot erstellen
+ggplot(pareto_data, aes(x = is_top, y = total_CRPS, fill = is_top)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Other Counties" = "grey70", 
+                               "Los Angeles, CA" = "#a50026", # Highlight für bekannte Hotspots
+                               "Other Counties" = "grey80")) + # Farben anpassen
+  labs(title = "Dominance of High-CRPS Counties",
+       subtitle = paste("Contribution of Top", top_n_counties, "Counties vs. the Rest"),
+       x = "County",
+       y = "Sum of Mean CRPS") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 ## -----------------------------------------------------------------------------
@@ -1015,7 +1111,7 @@ names(twcrps_per_county) <- c("FIPS", "location", "Year", model_names)
 twcrps_per_county <- list(twcrps_per_county, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
 
 twcrps_per_county <- twcrps_per_county %>%
-  mutate(sum_twCRPS = rowSums(across(4:17), na.rm = TRUE)) %>%
+  mutate(sum_twCRPS = rowMeans(across(4:17), na.rm = TRUE)) %>%
   select(-c(4:17))
 
 map_data_twcrps <- twcrps_per_county %>%
@@ -1031,6 +1127,8 @@ hotspot_centroids_twcrps <- suppressWarnings(
 )
 hotspot_points_twcrps <- cbind(hotspot_centroids_twcrps, st_coordinates(hotspot_centroids_twcrps)) %>%
   st_drop_geometry()
+
+max(map_data_twcrps$sum_twCRPS)
 
 
 wnvnd_twcrps_map_plot <- ggplot() +
@@ -1074,16 +1172,17 @@ wnvnd_twcrps_map_plot <- ggplot() +
   ) +
   
   scale_fill_gradientn(
-    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#d73027", "#a50026"), 
+    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#a50026"), 
     trans = "log1p",
     name = "twCRPS",
-    breaks = c(5, 10, 20, 40, 60),
-    na.value = "white"
+    breaks = c(0, 0.5, 1, 3),
+    na.value = "white",
+    limits = c(0, 3)
   ) +
   
   theme_void() + 
   labs(
-    title = "Sum of twCRPS Across All Models for WNND Cases 2020"
+    title = "Mean twCRPS Across All Models for WNND Cases 2020"
   ) +
   theme(
     legend.position = "right",
@@ -1394,7 +1493,7 @@ roc_curve_selected_models <- autoplot(mm_eval, curvetype = "ROC") +
     labels = labels_AUC
   ) +
   ggplot2::labs(
-    title = "ROC Curve",
+    title = "", #ROC Curve
     x = "FAR",
     y = "HR",
     color = ""
@@ -1416,7 +1515,7 @@ if(store_plot == TRUE){
 ## Figure 4: Reliability diagrams for previous peace
 ## -----------------------------------------------------------------------------
 # Title grob for the combined plot
-tg <- textGrob("CORP Reliability Diagrams", gp = gpar(fontsize = 18, hjust = 0.5))
+tg <- textGrob("", gp = gpar(fontsize = 18, hjust = 0.5)) #CORP Reliability Diagrams
 
 
 # -------------------------------------------------------------------
