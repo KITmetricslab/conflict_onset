@@ -535,7 +535,7 @@ prob_models_all_situation_long_binary_actual <- prob_models_all_situation_long %
 ## -----
 ## save plots in folders
 ## ----
-store_plot <- TRUE
+store_plot <- FALSE
 # folder to store plots
 folder <- "plots_infections"
 
@@ -767,12 +767,27 @@ test <- actual_2020_situations %>%
 length(test$actual)
 
 
-# case counts La etc.
+# case counts
+# LA
 df_actual_2019[df_actual_2019$FIPS == 6037, ]
 df_actual_2020[df_actual_2020$FIPS == 6037, ]
 
+# Maricopa
 df_actual_2019[df_actual_2019$FIPS == 04013, ]
 df_actual_2020[df_actual_2020$FIPS == 04013, ]
+
+# Miami,FL
+df_actual_2019[df_actual_2019$FIPS == 12086, ]
+df_actual_2020[df_actual_2020$FIPS == 12086, ]
+
+# Collier,FL
+df_actual_2019[df_actual_2019$FIPS == 12021, ]
+df_actual_2020[df_actual_2020$FIPS == 12021, ]
+
+# Broward,FL
+df_actual_2019[df_actual_2019$FIPS == 12011, ]
+df_actual_2020[df_actual_2020$FIPS == 12011, ]
+
 
 
 ##################
@@ -868,7 +883,7 @@ hist_inset <- ggplot(actual_2020_situations, aes(x = actual)) +
   labs(
     title = "All US Counties",
     x = "Cases",
-    y = "Counties (log)"
+    y = "Counties"
   ) +
   scale_y_continuous(
     breaks = c(0, 10, 100, 1000, 3000),
@@ -1008,8 +1023,8 @@ if(store_plot == TRUE){
 }
 
 
-
-# 1. Daten für die Pareto-Analyse vorbereiten
+##########################################################################################
+# Anteil der top 5 höchsten CRPS counties an Sum Mean CRPS - alle Modelle
 top_n_counties <- 5
 pareto_data <- map_data_crps %>%
   # Wir nehmen den Mean CRPS oder Sum CRPS (je nachdem was du in der Map nutzt)
@@ -1020,7 +1035,6 @@ pareto_data <- map_data_crps %>%
   # Sortierung für den Plot
   mutate(is_top = fct_reorder(is_top, total_CRPS, .desc = TRUE))
 
-# 2. Plot erstellen
 ggplot(pareto_data, aes(x = is_top, y = total_CRPS, fill = is_top)) +
   geom_bar(stat = "identity") +
   scale_fill_manual(values = c("Other Counties" = "grey70", 
@@ -1033,6 +1047,149 @@ ggplot(pareto_data, aes(x = is_top, y = total_CRPS, fill = is_top)) +
   theme_minimal() +
   theme(legend.position = "none",
         axis.text.x = element_text(angle = 45, hjust = 1))
+################################################################################################
+
+
+
+## -----------------------------------------------------------------------------
+## Figure 2b: Crps per county and outbreak situation - top three models
+## -----------------------------------------------------------------------------
+crps_per_county_top3 <- lapply(models_scoring_rules, function(m) m %>% select("FIPS", "location", "Year", "crps")) %>%
+  reduce(left_join, c("FIPS", "location", "Year"))
+names(crps_per_county_top3) <- c("FIPS", "location", "Year", model_names)
+crps_per_county_top3 <- list(crps_per_county_top3, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
+
+top_models <- c("MSSM", "Stanford", "MHC")
+
+crps_per_county_top3 <- crps_per_county_top3 %>%
+  mutate(sum_CRPS = rowMeans(across(all_of(top_models)), na.rm = TRUE)) %>%
+  select(-c(4:17))
+
+map_data_crps_top3 <- crps_per_county_top3 %>%
+  # add leading zero if missing
+  mutate(GEOID = sprintf("%05d", as.numeric(FIPS))) %>%
+  right_join(us_counties, by = "GEOID") %>%
+  st_as_sf()# geographic map
+
+hotspot_centroids_crps_top3 <- suppressWarnings(
+  map_data_crps_top3 %>%
+    filter(situation %in% c("onset", "ongoing", "resolved")) %>%
+    st_centroid() # calculate the centorid of each county that is not "none"
+)
+hotspot_points_crps_top3 <- cbind(hotspot_centroids_crps_top3, st_coordinates(hotspot_centroids_crps_top3)) %>%
+  st_drop_geometry()
+
+max(map_data_crps_top3$sum_CRPS)
+
+wnvnd_crps_top3_map_plot <- ggplot() +
+  
+  # map of US
+  geom_sf(data = map_data_crps_top3, aes(fill = sum_CRPS), color = "white", linewidth = 0.1) +
+  
+  # shape and color of the points
+  geom_point(data = hotspot_points_crps_top3,
+             aes(x = X, y = Y, shape = situation, color = situation),
+             size = 1.8) +
+  
+  # Shapes of the midpoints of the counties
+  scale_shape_manual(
+    name = "Disease Situation", 
+    values = c(
+      "onset" = 17,       # triangle
+      "ongoing" = 15,     # square
+      "resolved" = 16     # circle
+    ),
+    labels = c(
+      "onset" = onset_label, 
+      "ongoing" = ongoing_label, 
+      "resolved" = resolved_label
+    )
+  ) +
+  
+  # Colors of the midpoints of the counties
+  scale_color_manual(
+    name = "Disease Situation",
+    values = c(
+      "onset" = "black",
+      "ongoing" = "grey30",
+      "resolved" = "grey"
+    ),
+    labels = c(
+      "onset" = onset_label, 
+      "ongoing" = ongoing_label, 
+      "resolved" = resolved_label
+    )
+  ) +
+  
+  scale_fill_gradientn(
+    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#a50026"), 
+    trans = "log1p",
+    name = "CRPS",
+    breaks = c(0, 1, 3, 10, 30, 120), 
+    na.value = "white",
+    limits = c(0, 120),
+    oob = scales::squish
+  ) +
+  
+  theme_void() + 
+  labs(
+    title = "Mean CRPS of Top Three Performing Models for WNND Cases 2020"
+  ) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 18, hjust = 0.5, margin = margin(b = 10)),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    
+    legend.spacing.y = unit(0.5, "cm")
+  ) +
+  guides(
+    shape = guide_legend(order = 1),
+    color = guide_legend(order = 1),
+    fill  = guide_colorbar(order = 2)
+  )
+
+plot(wnvnd_crps_map_plot)
+
+if(store_plot == TRUE){
+  ggsave(paste0(folder,"/","WNND_crps_top3_map.png"),
+         plot = wnvnd_crps_top3_map_plot, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
+         bg="white")
+}
+
+
+##########################################################################################
+# Anteil der top 5 höchsten CRPS counties an Sum Mean CRPS - top 3 selected Modelle
+top_n_counties <- 5
+pareto_data <- map_data_crps_top3 %>%
+  mutate(is_top = ifelse(rank(desc(sum_CRPS)) <= top_n_counties, 
+                         as.character(location), "Other Counties")) %>%
+  group_by(is_top) %>%
+  summarise(total_CRPS = sum(sum_CRPS), .groups = "drop") %>%
+  # Sortierung für den Plot
+  mutate(is_top = fct_reorder(is_top, total_CRPS, .desc = TRUE))
+
+ggplot(pareto_data, aes(x = is_top, y = total_CRPS, fill = is_top)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Other Counties" = "grey70", 
+                               "Los Angeles, CA" = "#a50026", # Highlight für bekannte Hotspots
+                               "Other Counties" = "grey80")) + # Farben anpassen
+  labs(title = "Dominance of High-CRPS Counties",
+       subtitle = paste("Contribution of Top", top_n_counties, "Counties vs. the Rest"),
+       x = "County",
+       y = "Sum of Mean CRPS") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+##########################################################################################
+
+
+
+
+
+
+
+
 
 
 ## -----------------------------------------------------------------------------
