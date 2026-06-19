@@ -523,19 +523,90 @@ prob_models_all_situation_long_binary_actual <- prob_models_all_situation_long %
 
 
 
-
-
-
-
 ################################################################################
+## Descriptive Analysis
+################################################################################
+
+## Number of counties to predict
+length(unique(df_predictions$FIPS))
+
+## Sum of WNND cases 2020
+# check wether actuals coincide with the analysis of the paper on page 5
+# 559 WNND cases?
+sum(actual_2020_situations$actual)
+
+## Number of counties with WNND > 0
+counties_wnnd_great_zero <- actual_2020_situations %>%
+  filter(actual > 0)
+length(counties_wnnd_great_zero$location)
+
+## Top 5 counties with largest case counts
+top_5_counties <- actual_2020_situations %>%
+  slice_max(order_by = actual, n = 5)
+
+top_5_counties
+
+## Number of counties per disease situation
+# (Re)Introduction
+actual_2020_situations %>%
+  filter(situation == "onset") %>%
+  pull(FIPS) %>%
+  n_distinct()
+
+# Sustained Transmission
+actual_2020_situations %>%
+  filter(situation == "ongoing") %>%
+  pull(FIPS) %>%
+  n_distinct()
+
+# Continued Absence
+actual_2020_situations %>%
+  filter(situation == "none") %>%
+  pull(FIPS) %>%
+  n_distinct()
+
+# End of Transmission
+actual_2020_situations %>%
+  filter(situation == "resolved") %>%
+  pull(FIPS) %>%
+  n_distinct()
+
+
+# case counts
+# LA
+df_actual_2019[df_actual_2019$FIPS == 6037, ]
+df_actual_2020[df_actual_2020$FIPS == 6037, ]
+
+# Maricopa
+df_actual_2019[df_actual_2019$FIPS == 04013, ]
+df_actual_2020[df_actual_2020$FIPS == 04013, ]
+
+# Miami,FL
+df_actual_2019[df_actual_2019$FIPS == 12086, ]
+df_actual_2020[df_actual_2020$FIPS == 12086, ]
+
+# Collier,FL
+df_actual_2019[df_actual_2019$FIPS == 12021, ]
+df_actual_2020[df_actual_2020$FIPS == 12021, ]
+
+# Broward,FL
+df_actual_2019[df_actual_2019$FIPS == 12011, ]
+df_actual_2020[df_actual_2020$FIPS == 12011, ]
+
+
+
+
+
+
+#############################################################################################################################################
 ## PLOTS
-################################################################################
+#############################################################################################################################################
 
 
 ## -----
 ## save plots in folders
 ## ----
-store_plot <- FALSE
+store_plot <- TRUE
 # folder to store plots
 folder <- "plots_infections"
 
@@ -569,10 +640,11 @@ model_labels_df <- data.frame("name_original" = names(model_labels), "name_paper
 
 ## --
 ## change this if needed. everything else is dynamic!
-selected_models <- c("ARS", "LANL",
+selected_models <- c("ARS",
                      "MHC", "MSSM",
-                     "UI", "NYSW",
-                     "Stanford", "WDH")
+                     "NCSU",
+                     "NYSW", "Rutgers",
+                     "Stanford", "UCD")
 ## --
 
 
@@ -642,10 +714,10 @@ margin <- unit(0.5, "line")
 
 
 ## labels for situations
-onset_label <- "Introduction"
-ongoing_label <- "Ongoing Infections"
-resolved_label <- "End of Infections"
-none_label <- "Ongoing Absence"
+onset_label <- "(Re)Introduction"
+ongoing_label <- "Sustained transmission"
+resolved_label <- "End/ interrpution of transmission"
+none_label <- "Continued absence"
 
 
 ##################
@@ -753,41 +825,6 @@ if(store_plot == TRUE){
          plot = wnvnd_map_plot, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
          bg="white")
 }
-
-
-
-
-# check wether actuals coincide with the analysis of the paper on page 5
-# 559 WNND cases?
-sum(actual_2020_situations$actual)
-test <- actual_2020_situations %>%
-  filter(actual > 0)
-
-# 181 counties
-length(test$actual)
-
-
-# case counts
-# LA
-df_actual_2019[df_actual_2019$FIPS == 6037, ]
-df_actual_2020[df_actual_2020$FIPS == 6037, ]
-
-# Maricopa
-df_actual_2019[df_actual_2019$FIPS == 04013, ]
-df_actual_2020[df_actual_2020$FIPS == 04013, ]
-
-# Miami,FL
-df_actual_2019[df_actual_2019$FIPS == 12086, ]
-df_actual_2020[df_actual_2020$FIPS == 12086, ]
-
-# Collier,FL
-df_actual_2019[df_actual_2019$FIPS == 12021, ]
-df_actual_2020[df_actual_2020$FIPS == 12021, ]
-
-# Broward,FL
-df_actual_2019[df_actual_2019$FIPS == 12011, ]
-df_actual_2020[df_actual_2020$FIPS == 12011, ]
-
 
 
 ##################
@@ -918,7 +955,7 @@ if(store_plot == TRUE){
 
 
 ## -----------------------------------------------------------------------------
-## Figure 2a: Crps per county and outbreak situation
+## Figure 2a: Crps per county and outbreak situation for selected models
 ## -----------------------------------------------------------------------------
 crps_per_county <- lapply(models_scoring_rules, function(m) m %>% select("FIPS", "location", "Year", "crps")) %>%
   reduce(left_join, c("FIPS", "location", "Year"))
@@ -926,7 +963,7 @@ names(crps_per_county) <- c("FIPS", "location", "Year", model_names)
 crps_per_county <- list(crps_per_county, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
 
 crps_per_county <- crps_per_county %>%
-  mutate(sum_CRPS = rowMeans(across(4:17), na.rm = TRUE)) %>%
+  mutate(sum_CRPS = rowMeans(across(all_of(selected_models)), na.rm = TRUE)) %>%
   select(-c(4:17))
   
 map_data_crps <- crps_per_county %>%
@@ -1050,148 +1087,6 @@ ggplot(pareto_data, aes(x = is_top, y = total_CRPS, fill = is_top)) +
 ################################################################################################
 
 
-
-## -----------------------------------------------------------------------------
-## Figure 2b: Crps per county and outbreak situation - top three models
-## -----------------------------------------------------------------------------
-crps_per_county_top3 <- lapply(models_scoring_rules, function(m) m %>% select("FIPS", "location", "Year", "crps")) %>%
-  reduce(left_join, c("FIPS", "location", "Year"))
-names(crps_per_county_top3) <- c("FIPS", "location", "Year", model_names)
-crps_per_county_top3 <- list(crps_per_county_top3, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
-
-top_models <- c("MSSM", "Stanford", "MHC")
-
-crps_per_county_top3 <- crps_per_county_top3 %>%
-  mutate(sum_CRPS = rowMeans(across(all_of(top_models)), na.rm = TRUE)) %>%
-  select(-c(4:17))
-
-map_data_crps_top3 <- crps_per_county_top3 %>%
-  # add leading zero if missing
-  mutate(GEOID = sprintf("%05d", as.numeric(FIPS))) %>%
-  right_join(us_counties, by = "GEOID") %>%
-  st_as_sf()# geographic map
-
-hotspot_centroids_crps_top3 <- suppressWarnings(
-  map_data_crps_top3 %>%
-    filter(situation %in% c("onset", "ongoing", "resolved")) %>%
-    st_centroid() # calculate the centorid of each county that is not "none"
-)
-hotspot_points_crps_top3 <- cbind(hotspot_centroids_crps_top3, st_coordinates(hotspot_centroids_crps_top3)) %>%
-  st_drop_geometry()
-
-max(map_data_crps_top3$sum_CRPS)
-
-wnvnd_crps_top3_map_plot <- ggplot() +
-  
-  # map of US
-  geom_sf(data = map_data_crps_top3, aes(fill = sum_CRPS), color = "white", linewidth = 0.1) +
-  
-  # shape and color of the points
-  geom_point(data = hotspot_points_crps_top3,
-             aes(x = X, y = Y, shape = situation, color = situation),
-             size = 1.8) +
-  
-  # Shapes of the midpoints of the counties
-  scale_shape_manual(
-    name = "Disease Situation", 
-    values = c(
-      "onset" = 17,       # triangle
-      "ongoing" = 15,     # square
-      "resolved" = 16     # circle
-    ),
-    labels = c(
-      "onset" = onset_label, 
-      "ongoing" = ongoing_label, 
-      "resolved" = resolved_label
-    )
-  ) +
-  
-  # Colors of the midpoints of the counties
-  scale_color_manual(
-    name = "Disease Situation",
-    values = c(
-      "onset" = "black",
-      "ongoing" = "grey30",
-      "resolved" = "grey"
-    ),
-    labels = c(
-      "onset" = onset_label, 
-      "ongoing" = ongoing_label, 
-      "resolved" = resolved_label
-    )
-  ) +
-  
-  scale_fill_gradientn(
-    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#a50026"), 
-    trans = "log1p",
-    name = "CRPS",
-    breaks = c(0, 1, 3, 10, 30, 120), 
-    na.value = "white",
-    limits = c(0, 120),
-    oob = scales::squish
-  ) +
-  
-  theme_void() + 
-  labs(
-    title = "Mean CRPS of Top Three Performing Models for WNND Cases 2020"
-  ) +
-  theme(
-    legend.position = "right",
-    plot.title = element_text(size = 18, hjust = 0.5, margin = margin(b = 10)),
-    legend.title = element_text(size = 14),
-    legend.text = element_text(size = 12),
-    
-    legend.spacing.y = unit(0.5, "cm")
-  ) +
-  guides(
-    shape = guide_legend(order = 1),
-    color = guide_legend(order = 1),
-    fill  = guide_colorbar(order = 2)
-  )
-
-plot(wnvnd_crps_map_plot)
-
-if(store_plot == TRUE){
-  ggsave(paste0(folder,"/","WNND_crps_top3_map.png"),
-         plot = wnvnd_crps_top3_map_plot, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
-         bg="white")
-}
-
-
-##########################################################################################
-# Anteil der top 5 höchsten CRPS counties an Sum Mean CRPS - top 3 selected Modelle
-top_n_counties <- 5
-pareto_data <- map_data_crps_top3 %>%
-  mutate(is_top = ifelse(rank(desc(sum_CRPS)) <= top_n_counties, 
-                         as.character(location), "Other Counties")) %>%
-  group_by(is_top) %>%
-  summarise(total_CRPS = sum(sum_CRPS), .groups = "drop") %>%
-  # Sortierung für den Plot
-  mutate(is_top = fct_reorder(is_top, total_CRPS, .desc = TRUE))
-
-ggplot(pareto_data, aes(x = is_top, y = total_CRPS, fill = is_top)) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("Other Counties" = "grey70", 
-                               "Los Angeles, CA" = "#a50026", # Highlight für bekannte Hotspots
-                               "Other Counties" = "grey80")) + # Farben anpassen
-  labs(title = "Dominance of High-CRPS Counties",
-       subtitle = paste("Contribution of Top", top_n_counties, "Counties vs. the Rest"),
-       x = "County",
-       y = "Sum of Mean CRPS") +
-  theme_minimal() +
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-##########################################################################################
-
-
-
-
-
-
-
-
-
-
 ## -----------------------------------------------------------------------------
 ## Figure 2b: Crps decomposition
 ## -----------------------------------------------------------------------------
@@ -1223,7 +1118,7 @@ crps_infections_situation_plot <- crps_selected_models %>%
                                "resolved" = resolved_label,
                                "onset" = onset_label,
                                "none" = none_label)) +
-  scale_x_break(c(1.5, 22.5), scales = "fixed") +
+  #scale_x_break(c(1.5, 22.5), scales = "fixed") +
   theme_minimal() +
   theme(
     panel.grid.major.y = element_blank(),
@@ -1259,6 +1154,21 @@ counties_per_situation <- wnv_situations %>%
             none = sum(situation == "none", na.rm = TRUE))
   
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## -----------------------------------------------------------------------------
 ## Figure 2c: twCrps per county and outbreak situation
 ## -----------------------------------------------------------------------------
@@ -1268,7 +1178,7 @@ names(twcrps_per_county) <- c("FIPS", "location", "Year", model_names)
 twcrps_per_county <- list(twcrps_per_county, wnv_situations) %>% reduce(left_join, c("FIPS", "location", "Year"))
 
 twcrps_per_county <- twcrps_per_county %>%
-  mutate(sum_twCRPS = rowMeans(across(4:17), na.rm = TRUE)) %>%
+  mutate(sum_twCRPS = rowMeans(across(all_of(selected_models)), na.rm = TRUE)) %>%
   select(-c(4:17))
 
 map_data_twcrps <- twcrps_per_county %>%
@@ -1399,7 +1309,7 @@ twcrps_infections_situation_plot <- twcrps_selected_models %>%
                                "resolved" = resolved_label,
                                "onset" = onset_label,
                                "none" = none_label)) +
-  scale_x_break(c(0.4, 2.7), scales = "fixed") +
+  #scale_x_break(c(0.4, 2.7), scales = "fixed") +
   theme_minimal() +
   theme(
     panel.grid.major.y = element_blank(),
@@ -1453,7 +1363,7 @@ brier_infections_situation_plot <- brier_selected_models %>%
                                "resolved" = resolved_label,
                                "onset" = onset_label,
                                "none" = none_label)) +
-  scale_x_break(c(0.2, 0.65), scales = "fixed") +
+  #scale_x_break(c(0.2, 0.65), scales = "fixed") +
   theme_minimal() +
   theme(
     panel.grid.major.y = element_blank(),
@@ -1605,21 +1515,23 @@ roc_data_prev_none <- prev_none_prob_month_long_binary_actual
 #roc_data_prev_none <- prob_models_all_situation_long_binary_actual
 
 ## ---
-## In-depth: 8 models
+## In-depth: selected models and naive baseline
 ## ---
+# add baseline
+selected_models_roc <- c(selected_models, "UI")
 # filter relevant models
 roc_data_prev_none_selected <- roc_data_prev_none %>%
-  filter(model %in% selected_models)
+  filter(model %in% selected_models_roc)
 
 # create list of scores
-score_list_selected <- lapply(selected_models, function(m) {
+score_list_selected <- lapply(selected_models_roc, function(m) {
   roc_data_prev_none_selected %>%
     filter(model == m) %>%
     pull(onset_prob_pred)
 })
 
 # create list of labels
-label_list_selected <- lapply(selected_models, function(m) {
+label_list_selected <- lapply(selected_models_roc, function(m) {
   roc_data_prev_none_selected %>%
     filter(model == m) %>%
     pull(actual)
@@ -1633,20 +1545,30 @@ labels_joined_selected <- join_labels(label_list_selected)
 mm_selected_models <- mmdata(
   scores   = scores_joined_selected,
   labels   = labels_joined_selected,
-  modnames = selected_models
+  modnames = selected_models_roc
 )
 
+selected_model_labels_roc <- c(selected_model_labels, "UI" = "Naive")
+selected_model_colors_roc <- c(selected_model_colors, "UI" = "grey30")
+
 mm_eval <- evalmod(mm_selected_models)
-auc_selected_models <- cbind(auc(mm_eval) %>% filter(curvetypes == "ROC"), selected_model_labels)
+
+auc_selected_models <- auc(mm_eval) %>% filter(curvetypes == "ROC")
+auc_lookup <- setNames(auc_selected_models$aucs, auc_selected_models$modnames)
+labels_AUC <- paste0(
+  selected_model_labels_roc, 
+  ", AUC = ", 
+  sprintf("%.2f", auc_lookup[names(selected_model_labels_roc)])
+)
+names(labels_AUC) <- names(selected_model_labels_roc)
 
 
-labels_AUC <- paste0(auc_selected_models$selected_model_labels, ", AUC = ", round(auc_selected_models$aucs, 2))
 
 roc_curve_selected_models <- autoplot(mm_eval, curvetype = "ROC") +
   ggplot2::geom_line(size = 1, alpha = 0.8) +
   ggplot2::scale_color_manual(
-    values = selected_model_colors,
-    breaks = names(selected_model_labels),
+    values = selected_model_colors_roc,
+    breaks = names(selected_model_labels_roc),
     labels = labels_AUC
   ) +
   ggplot2::labs(
@@ -1665,7 +1587,6 @@ if(store_plot == TRUE){
          plot = roc_curve_selected_models, width = 1.2 * 3391, height = 1.2 * 1225, dpi = 300, units = "px",
          bg="white")
 }
-
 
 
 ## -----------------------------------------------------------------------------
@@ -1691,7 +1612,7 @@ names(selected_colors) <- selected_models
 # -------------------------------------------------------------------
 # Function: Reliability Diagram
 # -------------------------------------------------------------------
-reliabilitydiag.custom <- function(fcst, obs, pathclr = "red", confnveau = 0.9, bndtype="diagonal", unc_mthd = "resampling", annt_score_decom = "large") {
+reliabilitydiag.custom <- function(fcst, obs, pathclr = "red", confnveau = 0.9, bndtype="diagonal", unc_mthd = "resampling", annt_score_decom = NA) {
   
   # compute reliability diagram
   r_selected <- reliabilitydiag(
@@ -1747,6 +1668,10 @@ reliabilitydiag.custom <- function(fcst, obs, pathclr = "red", confnveau = 0.9, 
     }
   }
   
+  skip_annot <- is.null(annt_score_decom) || 
+    is.na(annt_score_decom) || 
+    tolower(annt_score_decom) %in% c("no", "none", "")
+  
   # final plot
   p <- reliability_plot +
     # theme_fontsize +
@@ -1796,89 +1721,93 @@ reliabilitydiag.custom <- function(fcst, obs, pathclr = "red", confnveau = 0.9, 
       ggplot2::coord_cartesian(ylim = c(0, 1), xlim = c(0, 1))
   }
   
-  if (annt_score_decom == "small") {
-    p <- p +
-      annotate(
-        "text",
-        x = .125,
-        y = 1.01,
-        label = sprintf("MCB = .%03d",
-                        round(summary(r_selected)$miscalibration * 1000)),
-        color = "red",
-        size = 2
-      ) +
-      annotate(
-        "text",
-        x = .125,
-        y = .95,
-        label = sprintf("DSC = .%03d",
-                        round(summary(r_selected)$discrimination * 1000)),
-        size = 2
-      ) +
-      annotate(
-        "text",
-        x = .125,
-        y = .89,
-        label = sprintf("UNC = .%03d",
-                        round(summary(r_selected)$uncertainty * 1000)),
-        size = 2
-      )
-    
-  } else if (annt_score_decom == "large"){
-    p <- p +
-      annotate(
-        "text",
-        x = .125,
-        y = .96,
-        label = sprintf("MCB = .%03d",
-                        round(summary(r_selected)$miscalibration * 1000)),
-        color = "red",
-        size = 4
-      ) +
-      annotate(
-        "text",
-        x = .125,
-        y = .90,
-        label = sprintf("DSC = .%03d",
-                        round(summary(r_selected)$discrimination * 1000)),
-        size = 4
-      ) +
-      annotate(
-        "text",
-        x = .125,
-        y = .84,
-        label = sprintf("UNC = .%03d",
-                        round(summary(r_selected)$uncertainty * 1000)),
-        size = 4
-      )
-  } else if (annt_score_decom == "medium"){
-    p <- p +
-      annotate(
-        "text",
-        x = .125,
-        y = .96,
-        label = sprintf("MCB = .%03d",
-                        round(summary(r_selected)$miscalibration * 1000)),
-        color = "red",
-        size = 3
-      ) +
-      annotate(
-        "text",
-        x = .125,
-        y = .90,
-        label = sprintf("DSC = .%03d",
-                        round(summary(r_selected)$discrimination * 1000)),
-        size = 3
-      ) +
-      annotate(
-        "text",
-        x = .125,
-        y = .84,
-        label = sprintf("UNC = .%03d",
-                        round(summary(r_selected)$uncertainty * 1000)),
-        size = 3
-      )
+  if(!skip_annot){
+    if (annt_score_decom == "small") {
+      p <- p +
+        annotate(
+          "text",
+          x = .125,
+          y = 1.01,
+          label = sprintf("MCB = .%03d",
+                          round(summary(r_selected)$miscalibration * 1000)),
+          color = "red",
+          size = 2
+        ) +
+        annotate(
+          "text",
+          x = .125,
+          y = .95,
+          label = sprintf("DSC = .%03d",
+                          round(summary(r_selected)$discrimination * 1000)),
+          size = 2
+        ) +
+        annotate(
+          "text",
+          x = .125,
+          y = .89,
+          label = sprintf("UNC = .%03d",
+                          round(summary(r_selected)$uncertainty * 1000)),
+          size = 2
+        )
+      
+    } else if (annt_score_decom == "large"){
+      p <- p +
+        annotate(
+          "text",
+          x = .125,
+          y = .96,
+          label = sprintf("MCB = .%03d",
+                          round(summary(r_selected)$miscalibration * 1000)),
+          color = "red",
+          size = 4
+        ) +
+        annotate(
+          "text",
+          x = .125,
+          y = .90,
+          label = sprintf("DSC = .%03d",
+                          round(summary(r_selected)$discrimination * 1000)),
+          size = 4
+        ) +
+        annotate(
+          "text",
+          x = .125,
+          y = .84,
+          label = sprintf("UNC = .%03d",
+                          round(summary(r_selected)$uncertainty * 1000)),
+          size = 4
+        )
+    } else if (annt_score_decom == "medium"){
+      p <- p +
+        annotate(
+          "text",
+          x = .125,
+          y = .96,
+          label = sprintf("MCB = .%03d",
+                          round(summary(r_selected)$miscalibration * 1000)),
+          color = "red",
+          size = 3
+        ) +
+        annotate(
+          "text",
+          x = .125,
+          y = .90,
+          label = sprintf("DSC = .%03d",
+                          round(summary(r_selected)$discrimination * 1000)),
+          size = 3
+        ) +
+        annotate(
+          "text",
+          x = .125,
+          y = .84,
+          label = sprintf("UNC = .%03d",
+                          round(summary(r_selected)$uncertainty * 1000)),
+          size = 3
+        )
+    }
   }
+  
+  
   
   
   return(p)
@@ -1899,8 +1828,7 @@ for (model_name in selected_models) {
     selected_colors[model_name],
     0.9,
     "diagonal",  #"estimate" or "diagonal"
-    "resampling",
-    "small"
+    "resampling"
   ) + ggplot2::labs(
     title = model_labels[model_name],
     x = "Forecast value",
@@ -1938,192 +1866,166 @@ if (store_plot == TRUE) {
   )
 }
 
-# -------------------------------------------------------------------
-# Align ROC curve
-# -------------------------------------------------------------------
-
-roc_reliability_plot <-
-  (roc_curve_selected_models + theme(legend.position = "none")) /
-  (corp_plots_list_selected_no_prev_cases$ARS +
-     labs(title = "Reliability Diagram") +
-     theme_fontsize) +
-  plot_layout(heights = c(1, 1))
-
-plot(roc_reliability_plot)
-
-
-if(store_plot == TRUE){
-  ggsave(paste0(folder,"/","roc_reliability_selected_models_no_prev_cases.png"),
-         plot = roc_reliability_plot, width = 1.2 * 1000, height = 1.2 * 2000, dpi = 300, units = "px",
-         bg="white")
-}
-
-
-
-
-
-
-
 
 ## -----------------------------------------------------------------------------
 ## BRIER: MSC-DSC-plots for previous peace
 ## -----------------------------------------------------------------------------
-brier_decomposition_results <- prev_none_prob_month_long_binary_actual %>%
-  group_by(model) %>%
-  group_split(.keep = TRUE) %>%
-  set_names(map_chr(., ~ unique(.x$model))) %>%
-  map(function(df) {
-    res <- mcbdsc(df %>% select(onset_prob_pred),
-                  y = df$actual,
-                  score = "Brier_score") #'   One of: `"Brier_score"` (default), `"log_score"`, `"MR_score"`.
-    
-    estimates(res) %>%
-      mutate(model = unique(df$model))
-  })
-
-## ---
-## In-depth: 8 models
-## ---
-# filter for selected models
-brier_decomposition_results_selected <- brier_decomposition_results[selected_models]
-
-## important remark for BRIER score:
-# UNC = variance of X~Ber(p=E(y)=mean(y)) -> p(1-p)
-#p <- models_scoring_rules$boot_240$actual_conflict
-#mean(p)*(1-mean(p))
-
-# combine to one dataframe
-brier_score_decomposition_selected <- bind_rows(brier_decomposition_results_selected) %>%
-  select(model, mean_score, MCB, DSC, UNC) %>%
-  rename(MeanScore = mean_score)
-
-brier_score_decomposition_barplot_selected <- brier_score_decomposition_selected %>%
-  mutate(score_invisible = MeanScore, gap = 0, gap1=0, gap2 = 0)
-
-# data frame with format for the barchart
-brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
-  arrange(MeanScore) %>%  # sort by MeanScore
-  pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap, gap1, gap2),
-               names_to = "component",
-               values_to = "value") %>%
-  mutate(class = case_when(
-    component %in% c("MeanScore") ~ "SCORE",
-    component %in% c("MCB", "UNC") ~ "MCB_UNC",
-    component %in% c("DSC", "score_invisible") ~ "DSC_score", 
-    component %in% c("gap") ~ "GAP",
-    component %in% c("gap1") ~ "GAPmeanscoreDSC",
-    component %in% c("gap2") ~ "GAPdscUNC",
-  )) %>%
-  select(model, class, component, value)
-
-brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
-  mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
-
-
-# dataset for model orderbased on MeanScore
-brier_levs_selected <- brier_score_decomposition_barplot_selected %>%
-  filter(component == "MeanScore") %>%
-  arrange(desc(value)) %>%
-  pull(model)
-
-# data for the plot
-brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
-  mutate(
-    class_group = case_when(
-      class == "MCB_UNC"   ~ 1,
-      class == "DSC_score"       ~ 2,
-      class == "SCORE" ~ 3,
-      class == "GAP" ~ 4,
-      class == "GAPmeanscoreDSC" ~ 5,
-      class == "GAPdscUNC" ~ 6
-      
-    ),  
-    model = factor(model, levels = brier_levs_selected, ordered = TRUE)
-  )
-
-brier_score_decomposition_barplot_selected$model <- recode(
-  brier_score_decomposition_barplot_selected$model,
-  !!!model_labels
-)
-
-
-# set order of subbars within group
-brier_score_decomposition_barplot_selected$component <- factor(
-  brier_score_decomposition_barplot_selected$component,
-  levels = c("gap", "gap1", "gap2", "MCB", "UNC", "DSC", "score_invisible", "MeanScore")
-)
-
-# set order of sub bars within group
-brier_score_decomposition_barplot_selected$class_group <- factor(
-  brier_score_decomposition_barplot_selected$class_group,
-  levels = c(4,1,6,2,3,5)    
-)
-
-# set width of mean score bar
-mean_score_bar_selected <- 4.5
-# set width of mcb,dcs,unc bars
-msc_dsc_unc_bar_selected <- 2
-
-# width column
-brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
-  mutate(
-    wdth = case_when(
-      # MeanScore
-      class_group == 3 ~ mean_score_bar_selected, #4
-      # MCB DSC
-      class_group %in% c(1, 2) ~ msc_dsc_unc_bar_selected, #1
-      # gapswithin groups
-      class_group == 6 ~ msc_dsc_unc_bar_selected,
-      # gap between groups top
-      class_group == 5 ~ 15,
-      #gap between groups
-      class_group == 4 ~ 8 #10
-      
-    )
-  )
-
-
-brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_selected, aes(x = class_group, y = value, fill = component)) +
-  geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot_selected$wdth) +
-  facet_grid(model ~ ., switch = "y") +
-  coord_flip() +
-  scale_fill_manual(
-    values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
-    ##
-    breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
-    ##
-    name = ""
-  ) +
-  labs(title = "Mean Brier Score Decomposition") + 
-  theme_classic() +
-  scale_y_continuous(breaks = seq(0, 0.8, by = 0.1)) +
-  theme(
-    panel.spacing = unit(0, "points"),
-    strip.background = element_blank(),
-    strip.placement = "outside",
-    strip.text.y.left = element_text(angle = 0, hjust = 1, size = 18),
-    axis.text.y = element_blank(),
-    axis.ticks.length.y = unit(0, "points"),
-    axis.ticks.x = element_blank(),
-    axis.title = element_blank(),
-    legend.position = "bottom",
-    panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
-    plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
-    legend.title = ggplot2::element_text(size = 15),
-    legend.text = ggplot2::element_text(size = 14),
-    axis.line.x = element_blank(),
-    axis.line.y = element_blank(),
-    axis.text.x = ggplot2::element_text(size = 14)
-  ) 
-
-brier_score_decomposition_selected
-
-
-if(store_plot == TRUE){
-  ggsave(paste0(folder,"/","brier_score_decomposition_selected_models_no_prev_cases.png"),
-         plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
-         bg="white")
-}
+# brier_decomposition_results <- prev_none_prob_month_long_binary_actual %>%
+#   group_by(model) %>%
+#   group_split(.keep = TRUE) %>%
+#   set_names(map_chr(., ~ unique(.x$model))) %>%
+#   map(function(df) {
+#     res <- mcbdsc(df %>% select(onset_prob_pred),
+#                   y = df$actual,
+#                   score = "Brier_score") #'   One of: `"Brier_score"` (default), `"log_score"`, `"MR_score"`.
+#     
+#     estimates(res) %>%
+#       mutate(model = unique(df$model))
+#   })
+# 
+# ## ---
+# ## In-depth: 8 models
+# ## ---
+# # filter for selected models
+# brier_decomposition_results_selected <- brier_decomposition_results[selected_models]
+# 
+# ## important remark for BRIER score:
+# # UNC = variance of X~Ber(p=E(y)=mean(y)) -> p(1-p)
+# #p <- models_scoring_rules$boot_240$actual_conflict
+# #mean(p)*(1-mean(p))
+# 
+# # combine to one dataframe
+# brier_score_decomposition_selected <- bind_rows(brier_decomposition_results_selected) %>%
+#   select(model, mean_score, MCB, DSC, UNC) %>%
+#   rename(MeanScore = mean_score)
+# 
+# brier_score_decomposition_barplot_selected <- brier_score_decomposition_selected %>%
+#   mutate(score_invisible = MeanScore, gap = 0, gap1=0, gap2 = 0)
+# 
+# # data frame with format for the barchart
+# brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
+#   arrange(MeanScore) %>%  # sort by MeanScore
+#   pivot_longer(cols = c(MeanScore, MCB, DSC, UNC, score_invisible, gap, gap1, gap2),
+#                names_to = "component",
+#                values_to = "value") %>%
+#   mutate(class = case_when(
+#     component %in% c("MeanScore") ~ "SCORE",
+#     component %in% c("MCB", "UNC") ~ "MCB_UNC",
+#     component %in% c("DSC", "score_invisible") ~ "DSC_score", 
+#     component %in% c("gap") ~ "GAP",
+#     component %in% c("gap1") ~ "GAPmeanscoreDSC",
+#     component %in% c("gap2") ~ "GAPdscUNC",
+#   )) %>%
+#   select(model, class, component, value)
+# 
+# brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
+#   mutate(model = factor(model, levels = unique(model[component == "MeanScore"])))
+# 
+# 
+# # dataset for model orderbased on MeanScore
+# brier_levs_selected <- brier_score_decomposition_barplot_selected %>%
+#   filter(component == "MeanScore") %>%
+#   arrange(desc(value)) %>%
+#   pull(model)
+# 
+# # data for the plot
+# brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
+#   mutate(
+#     class_group = case_when(
+#       class == "MCB_UNC"   ~ 1,
+#       class == "DSC_score"       ~ 2,
+#       class == "SCORE" ~ 3,
+#       class == "GAP" ~ 4,
+#       class == "GAPmeanscoreDSC" ~ 5,
+#       class == "GAPdscUNC" ~ 6
+#       
+#     ),  
+#     model = factor(model, levels = brier_levs_selected, ordered = TRUE)
+#   )
+# 
+# brier_score_decomposition_barplot_selected$model <- recode(
+#   brier_score_decomposition_barplot_selected$model,
+#   !!!model_labels
+# )
+# 
+# 
+# # set order of subbars within group
+# brier_score_decomposition_barplot_selected$component <- factor(
+#   brier_score_decomposition_barplot_selected$component,
+#   levels = c("gap", "gap1", "gap2", "MCB", "UNC", "DSC", "score_invisible", "MeanScore")
+# )
+# 
+# # set order of sub bars within group
+# brier_score_decomposition_barplot_selected$class_group <- factor(
+#   brier_score_decomposition_barplot_selected$class_group,
+#   levels = c(4,1,6,2,3,5)    
+# )
+# 
+# # set width of mean score bar
+# mean_score_bar_selected <- 4.5
+# # set width of mcb,dcs,unc bars
+# msc_dsc_unc_bar_selected <- 2
+# 
+# # width column
+# brier_score_decomposition_barplot_selected <- brier_score_decomposition_barplot_selected %>%
+#   mutate(
+#     wdth = case_when(
+#       # MeanScore
+#       class_group == 3 ~ mean_score_bar_selected, #4
+#       # MCB DSC
+#       class_group %in% c(1, 2) ~ msc_dsc_unc_bar_selected, #1
+#       # gapswithin groups
+#       class_group == 6 ~ msc_dsc_unc_bar_selected,
+#       # gap between groups top
+#       class_group == 5 ~ 15,
+#       #gap between groups
+#       class_group == 4 ~ 8 #10
+#       
+#     )
+#   )
+# 
+# 
+# brier_score_decomposition_selected <- ggplot(brier_score_decomposition_barplot_selected, aes(x = class_group, y = value, fill = component)) +
+#   geom_bar(stat = "identity", position = "stack", width = brier_score_decomposition_barplot_selected$wdth) +
+#   facet_grid(model ~ ., switch = "y") +
+#   coord_flip() +
+#   scale_fill_manual(
+#     values = c("gap1" = "darkgreen", "gap2" = "darkgreen","gap"="darkgreen","score_invisible" = "white","DSC" = "#808080", "UNC" = "#D9D9D9", "MCB" = "#A6A6A6", "MeanScore" = "#C05152"),          #"#1a1a2e"),  ##C05152 für MeanScore
+#     ##
+#     breaks = c("UNC", "MCB", "DSC", "MeanScore"), 
+#     ##
+#     name = ""
+#   ) +
+#   labs(title = "Mean Brier Score Decomposition") + 
+#   theme_classic() +
+#   scale_y_continuous(breaks = seq(0, 0.8, by = 0.1)) +
+#   theme(
+#     panel.spacing = unit(0, "points"),
+#     strip.background = element_blank(),
+#     strip.placement = "outside",
+#     strip.text.y.left = element_text(angle = 0, hjust = 1, size = 18),
+#     axis.text.y = element_blank(),
+#     axis.ticks.length.y = unit(0, "points"),
+#     axis.ticks.x = element_blank(),
+#     axis.title = element_blank(),
+#     legend.position = "bottom",
+#     panel.grid.major.x = element_line(color = "#D9D9D9", size = 0.1),
+#     plot.title = ggplot2::element_text(size = 18, hjust = 0.5),
+#     legend.title = ggplot2::element_text(size = 15),
+#     legend.text = ggplot2::element_text(size = 14),
+#     axis.line.x = element_blank(),
+#     axis.line.y = element_blank(),
+#     axis.text.x = ggplot2::element_text(size = 14)
+#   ) 
+# 
+# brier_score_decomposition_selected
+# 
+# 
+# if(store_plot == TRUE){
+#   ggsave(paste0(folder,"/","brier_score_decomposition_selected_models_no_prev_cases.png"),
+#          plot = brier_score_decomposition_selected, width = 1.0 * 4222, height = 1.0 * 2313, dpi = 300, units = "px",
+#          bg="white")
+# }
 
 
 
@@ -2479,7 +2381,7 @@ plot(selected_models_ranking_plot)
 
 if(store_plot == TRUE){
   ggsave(paste0(folder,"/","selected_models_ranking_plot.png"),
-         plot = selected_models_ranking_plot, width = 1.0 * 4222, height = 1.0 * 2000, dpi = 300, units = "px",
+         plot = selected_models_ranking_plot, width = 1.0 * 4222, height = 0.7 * 2000, dpi = 300, units = "px",
          bg="white")
 }
 
