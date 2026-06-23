@@ -523,81 +523,6 @@ prob_models_all_situation_long_binary_actual <- prob_models_all_situation_long %
 
 
 
-################################################################################
-## Descriptive Analysis
-################################################################################
-
-## Number of counties to predict
-length(unique(df_predictions$FIPS))
-
-## Sum of WNND cases 2020
-# check wether actuals coincide with the analysis of the paper on page 5
-# 559 WNND cases?
-sum(actual_2020_situations$actual)
-
-## Number of counties with WNND > 0
-counties_wnnd_great_zero <- actual_2020_situations %>%
-  filter(actual > 0)
-length(counties_wnnd_great_zero$location)
-
-## Top 5 counties with largest case counts
-top_5_counties <- actual_2020_situations %>%
-  slice_max(order_by = actual, n = 5)
-
-top_5_counties
-
-## Number of counties per disease situation
-# (Re)Introduction
-actual_2020_situations %>%
-  filter(situation == "onset") %>%
-  pull(FIPS) %>%
-  n_distinct()
-
-# Sustained Transmission
-actual_2020_situations %>%
-  filter(situation == "ongoing") %>%
-  pull(FIPS) %>%
-  n_distinct()
-
-# Continued Absence
-actual_2020_situations %>%
-  filter(situation == "none") %>%
-  pull(FIPS) %>%
-  n_distinct()
-
-# End of Transmission
-actual_2020_situations %>%
-  filter(situation == "resolved") %>%
-  pull(FIPS) %>%
-  n_distinct()
-
-
-# case counts
-# LA
-df_actual_2019[df_actual_2019$FIPS == 6037, ]
-df_actual_2020[df_actual_2020$FIPS == 6037, ]
-
-# Maricopa
-df_actual_2019[df_actual_2019$FIPS == 04013, ]
-df_actual_2020[df_actual_2020$FIPS == 04013, ]
-
-# Miami,FL
-df_actual_2019[df_actual_2019$FIPS == 12086, ]
-df_actual_2020[df_actual_2020$FIPS == 12086, ]
-
-# Collier,FL
-df_actual_2019[df_actual_2019$FIPS == 12021, ]
-df_actual_2020[df_actual_2020$FIPS == 12021, ]
-
-# Broward,FL
-df_actual_2019[df_actual_2019$FIPS == 12011, ]
-df_actual_2020[df_actual_2020$FIPS == 12011, ]
-
-
-
-
-
-
 #############################################################################################################################################
 ## PLOTS
 #############################################################################################################################################
@@ -606,7 +531,7 @@ df_actual_2020[df_actual_2020$FIPS == 12011, ]
 ## -----
 ## save plots in folders
 ## ----
-store_plot <- TRUE
+store_plot <- FALSE
 # folder to store plots
 folder <- "plots_infections"
 
@@ -1431,7 +1356,7 @@ crps_brier_integrands_plot <- ggplot(selected_models_brier, aes(x = a, y = brier
     y = "Mean Brier Score",
     colour = ""
   ) +
-  xlim(0,200) + 
+  xlim(0,50) + 
   scale_color_manual(
     values = selected_model_colors,
     breaks = names(selected_model_labels),
@@ -1476,11 +1401,11 @@ if(store_plot == TRUE){
 ## -----------------------------------------------------------------------------
 ## Figure 2f: Brier score per log-change threshold => twCRPS
 ## -----------------------------------------------------------------------------
-twcrps_brier_integrands_plot <- ggplot(selected_models_brier, aes(x = log_a_plus1, y = brier_avg, colour = model)) +
+twcrps_brier_integrands_plot <- ggplot(selected_models_brier, aes(x = a, y = brier_avg, colour = model)) +
   geom_line(size = .95, alpha = 0.8) +
   labs(
     title = "Mean Brier Score by Log-Change Threshold (twCRPS Integrand)",
-    x = "Threshold log(a+1)",
+    x = "Threshold a",
     y = "Mean Brier Score",
     colour = ""
   ) +
@@ -1488,6 +1413,10 @@ twcrps_brier_integrands_plot <- ggplot(selected_models_brier, aes(x = log_a_plus
     values = selected_model_colors,
     breaks = names(selected_model_labels),
     labels = selected_model_labels
+  ) +
+  scale_x_continuous(
+    trans = "log1p", # transformation log(a+1)
+    breaks = c(0, 1, 5, 10, 50, 100) 
   ) +
   theme_bw() +
   theme_fontsize
@@ -1500,6 +1429,9 @@ if(store_plot == TRUE){
          plot = twcrps_brier_integrands_plot, width = 1.0 * 3200, height = 1.0 * 1300, dpi = 300, units = "px",
          bg="white")
 }
+
+
+
 
 
 ## -----------------------------------------------------------------------------
@@ -1865,6 +1797,83 @@ if (store_plot == TRUE) {
     bg = "white"
   )
 }
+
+
+
+################################################################################
+## Descriptive Analysis
+################################################################################
+
+## Number of counties to predict
+length(unique(df_predictions$FIPS))
+
+## Sum of WNND cases 2020
+# check wether actuals coincide with the analysis of the paper on page 5
+# 559 WNND cases?
+sum(actual_2020_situations$actual)
+
+## Number of counties with WNND > 0
+counties_wnnd_great_zero <- actual_2020_situations %>%
+  filter(actual > 0)
+length(counties_wnnd_great_zero$location)
+
+## Top 5 counties with largest case counts
+top_5_counties <- actual_2020_situations %>%
+  slice_max(order_by = actual, n = 5)
+
+top_5_counties
+
+## Number of counties per disease situation
+# (Re)Introduction
+actual_2020_situations %>%
+  filter(situation == "onset") %>%
+  pull(FIPS) %>%
+  n_distinct()
+
+# Sustained Transmission
+actual_2020_situations %>%
+  filter(situation == "ongoing") %>%
+  pull(FIPS) %>%
+  n_distinct()
+
+# Continued Absence
+actual_2020_situations %>%
+  filter(situation == "none") %>%
+  pull(FIPS) %>%
+  n_distinct()
+
+# End of Transmission
+actual_2020_situations %>%
+  filter(situation == "resolved") %>%
+  pull(FIPS) %>%
+  n_distinct()
+
+
+# case counts
+# LA
+df_actual_2019[df_actual_2019$FIPS == 6037, ]
+df_actual_2020[df_actual_2020$FIPS == 6037, ]
+
+# Maricopa
+df_actual_2019[df_actual_2019$FIPS == 04013, ]
+df_actual_2020[df_actual_2020$FIPS == 04013, ]
+
+# Miami,FL
+df_actual_2019[df_actual_2019$FIPS == 12086, ]
+df_actual_2020[df_actual_2020$FIPS == 12086, ]
+
+# Collier,FL
+df_actual_2019[df_actual_2019$FIPS == 12021, ]
+df_actual_2020[df_actual_2020$FIPS == 12021, ]
+
+# Broward,FL
+df_actual_2019[df_actual_2019$FIPS == 12011, ]
+df_actual_2020[df_actual_2020$FIPS == 12011, ]
+
+
+
+
+
 
 
 ## -----------------------------------------------------------------------------
