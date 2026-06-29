@@ -346,62 +346,62 @@ for (m in names(predictive_probs)) {
 # label observations as either no infections ("none"), 
 # WNVND outbreak ("onset"), ongoing infections ("ongoing") or 
 # end of infections ("resolved")
-# based on the WNVND cases from the previous year 2018
+# based on the WNVND cases from the previous year 2019
 ## -----
-df_actual_2018 <- df_actual %>%
-  filter(Year == "2018") %>%
+df_actual_2019 <- df_actual %>%
+  filter(Year == "2019") %>%
   select(-Activity, 
          -Total.human.disease.cases,
          -X..Presumptive.viremic.blood.donors, 
          -Notes)
 
-df_actual_2018 <- df_actual_2018 %>%
+df_actual_2019 <- df_actual_2019 %>%
   rename(FIPS = Location,
          actual = Neuroinvasive.disease.cases) %>%
   select(-FullGeoName)
 
-df_actual_2018 <- left_join(df_actual_2018, geocodes, by = "FIPS")
+df_actual_2019 <- left_join(df_actual_2019, geocodes, by = "FIPS")
 
-new_actual_rows_for_counties_no_data_available_2018 <- geocodes %>%
-  anti_join(df_actual_2018, by = "FIPS") %>%
+new_actual_rows_for_counties_no_data_available_2019 <- geocodes %>%
+  anti_join(df_actual_2019, by = "FIPS") %>%
   
   mutate(
-    Year = 2018,
+    Year = 2019,
     actual = 0
   ) %>%
   
   select(Year, FIPS, actual, location)
 
-df_actual_2018 <- bind_rows(df_actual_2018, new_actual_rows_for_counties_no_data_available_2018)
+df_actual_2019 <- bind_rows(df_actual_2019, new_actual_rows_for_counties_no_data_available_2019)
 
 # sort by FIPS
-df_actual_2018 <- df_actual_2018 %>%
+df_actual_2019 <- df_actual_2019 %>%
   arrange(FIPS)
 
 
 wnv_situations <- df_actual_2020 %>%
-  # rename actual to avoid confusion with the 2018 actuals
+  # rename actual to avoid confusion with the 2019 actuals
   select(FIPS, location, Year, actual_2020 = actual) %>%
   
-  # join df_actual_2020 with .._2018 by FIPS
+  # join df_actual_2020 with .._2019 by FIPS
   left_join(
-    df_actual_2018 %>% select(FIPS, actual_2018 = actual),
+    df_actual_2019 %>% select(FIPS, actual_2019 = actual),
     by = "FIPS"
   ) %>%
   
-  # if county wasnt present in 2018 set the actuals to 0
-  mutate(actual_2018 = replace_na(actual_2018, 0)) %>%
+  # if county wasnt present in 2019 set the actuals to 0
+  mutate(actual_2019 = replace_na(actual_2019, 0)) %>%
   
   # assign situation labels
   mutate(
     outbreak_2020 = actual_2020 > 0,
-    outbreak_2018 = actual_2018 > 0,
+    outbreak_2019 = actual_2019 > 0,
     
     situation = case_when(
-      !outbreak_2020 & !outbreak_2018 ~ "none",
-      outbreak_2020 & !outbreak_2018  ~ "onset",
-      outbreak_2020 & outbreak_2018   ~ "ongoing",
-      !outbreak_2020 & outbreak_2018  ~ "resolved"
+      !outbreak_2020 & !outbreak_2019 ~ "none",
+      outbreak_2020 & !outbreak_2019  ~ "onset",
+      outbreak_2020 & outbreak_2019   ~ "ongoing",
+      !outbreak_2020 & outbreak_2019  ~ "resolved"
     )
   ) %>%
   select(FIPS, location, Year, situation)
@@ -531,7 +531,7 @@ prob_models_all_situation_long_binary_actual <- prob_models_all_situation_long %
 ## -----
 ## save plots in folders
 ## ----
-store_plot <- TRUE
+store_plot <- FALSE
 # folder to store plots
 folder <- "plots_infections"
 
@@ -753,10 +753,10 @@ if(store_plot == TRUE){
 
 
 ##################
-## Figure 1b:cases per county 2018
+## Figure 1b:cases per county 2019
 ##################
 # 2. df for plot
-map_data <- df_actual_2018 %>%
+map_data <- df_actual_2019 %>%
   # add leading zero if missing
   mutate(GEOID = sprintf("%05d", as.numeric(FIPS))) %>%
   right_join(us_counties, by = "GEOID") %>%
@@ -764,7 +764,7 @@ map_data <- df_actual_2018 %>%
 
 max(map_data$actual)
 
-wnvnd_map_plot_2018 <- ggplot() +
+wnvnd_map_plot_2019 <- ggplot() +
   
   # map of US
   geom_sf(data = map_data, aes(fill = actual), color = "white", linewidth = 0.1) +
@@ -781,7 +781,7 @@ wnvnd_map_plot_2018 <- ggplot() +
   
   theme_void() + 
   labs(
-    title = "WNND Cases 2018"
+    title = "WNND Cases 2019"
   ) +
   theme(
     legend.position = "right",
@@ -797,11 +797,11 @@ wnvnd_map_plot_2018 <- ggplot() +
     fill  = guide_colorbar(order = 2)
   )
 
-plot(wnvnd_map_plot_2018)
+plot(wnvnd_map_plot_2019)
 
 if(store_plot == TRUE){
-  ggsave(paste0(folder,"/","WNND_2018_map.png"),
-         plot = wnvnd_map_plot_2018, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
+  ggsave(paste0(folder,"/","WNND_2019_map.png"),
+         plot = wnvnd_map_plot_2019, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
          bg="white")
 }
 
@@ -1851,23 +1851,23 @@ actual_2020_situations %>%
 
 # case counts
 # LA
-df_actual_2018[df_actual_2018$FIPS == 6037, ]
+df_actual_2019[df_actual_2019$FIPS == 6037, ]
 df_actual_2020[df_actual_2020$FIPS == 6037, ]
 
 # Maricopa
-df_actual_2018[df_actual_2018$FIPS == 04013, ]
+df_actual_2019[df_actual_2019$FIPS == 04013, ]
 df_actual_2020[df_actual_2020$FIPS == 04013, ]
 
 # Miami,FL
-df_actual_2018[df_actual_2018$FIPS == 12086, ]
+df_actual_2019[df_actual_2019$FIPS == 12086, ]
 df_actual_2020[df_actual_2020$FIPS == 12086, ]
 
 # Collier,FL
-df_actual_2018[df_actual_2018$FIPS == 12021, ]
+df_actual_2019[df_actual_2019$FIPS == 12021, ]
 df_actual_2020[df_actual_2020$FIPS == 12021, ]
 
 # Broward,FL
-df_actual_2018[df_actual_2018$FIPS == 12011, ]
+df_actual_2019[df_actual_2019$FIPS == 12011, ]
 df_actual_2020[df_actual_2020$FIPS == 12011, ]
 
 
