@@ -531,7 +531,7 @@ prob_models_all_situation_long_binary_actual <- prob_models_all_situation_long %
 ## -----
 ## save plots in folders
 ## ----
-store_plot <- TRUE
+store_plot <- FALSE
 # folder to store plots
 folder <- "plots_infections"
 
@@ -745,9 +745,144 @@ wnvnd_map_plot <- ggplot() +
 plot(wnvnd_map_plot)
 
 
+
+
+
+
+
+
+
+
+## für praäsi ##########################
+wnvnd_map_plot <- ggplot() +
+  
+  # map of US
+  geom_sf(data = map_data, aes(fill = actual), color = "white", linewidth = 0.1) +
+  
+  # shape and color of the points
+  geom_point(data = hotspot_points,
+             aes(x = X, y = Y, shape = situation, color = situation),
+             size = 1.8) +
+  
+  # Shapes of the midpoints of the counties
+  scale_shape_manual(
+    name = "Disease Situation", 
+    values = c(
+      "onset" = 17,       # triangle
+      "ongoing" = 15,     # square
+      "resolved" = 16     # circle
+    ),
+    labels = c(
+      "onset" = onset_label, 
+      "ongoing" = ongoing_label, 
+      "resolved" = resolved_label
+    )
+  ) +
+  
+  # Colors of the midpoints of the counties
+  scale_color_manual(
+    name = "Disease Situation",
+    values = c(
+      "onset" = "black",
+      "ongoing" = "grey30",
+      "resolved" = "grey"
+    ),
+    labels = c(
+      "onset" = onset_label, 
+      "ongoing" = ongoing_label, 
+      "resolved" = resolved_label
+    )
+  ) +
+  
+  scale_fill_gradientn(
+    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#a50026"), 
+    trans = "log1p",
+    name = "Cases",
+    breaks = c(0, 1, 3, 10, 30, 120), 
+    na.value = "white",
+    limits = c(0, 120),
+    oob = scales::squish
+  ) +
+  
+  theme_void() + 
+  labs(
+    title = "WNND Cases 2020"
+  ) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 18, hjust = 0.5, margin = margin(b = 10)),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    
+    legend.spacing.y = unit(0.5, "cm")
+  ) +
+  guides(
+    shape = "none",
+    color = "none",
+    fill  = guide_colorbar(order = 2)
+  )
+
+
+
+
+
+#########################################
+
+
+
+
+
+
+
+
+
+
+
 if(store_plot == TRUE){
   ggsave(paste0(folder,"/","WNND_map.png"),
          plot = wnvnd_map_plot, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
+         bg="white")
+}
+
+
+
+
+wnvnd_map_plot_no_points <- ggplot() +
+  
+  # map of US
+  geom_sf(data = map_data, aes(fill = actual), color = "white", linewidth = 0.1) +
+  
+  scale_fill_gradientn(
+    colors = c("#e0f3f8", "#fdae61", "#f46d43", "#a50026"), 
+    trans = "log1p",
+    name = "Cases",
+    breaks = c(0, 1, 3, 10, 30, 120), 
+    na.value = "white",
+    limits = c(0, 120),
+    oob = scales::squish
+  ) +
+  
+  theme_void() + 
+  labs(
+    title = "WNND Cases 2020"
+  ) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 18, hjust = 0.5, margin = margin(b = 10)),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12),
+    
+    legend.spacing.y = unit(0.5, "cm")
+  ) +
+  guides(
+    shape = guide_legend(order = 1),
+    color = guide_legend(order = 1),
+    fill  = guide_colorbar(order = 2)
+  )
+
+if(store_plot == TRUE){
+  ggsave(paste0(folder,"/","WNND_map_no_situations.png"),
+         plot = wnvnd_map_plot_no_points, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
          bg="white")
 }
 
@@ -1394,6 +1529,103 @@ if(store_plot == TRUE){
 #   mutate(brier_proportion = CRPSBrierapprox/total_crps)
 # 
 # print(crps_brierSUM_results)
+
+
+################################################################
+## Figur only for single county
+###############################################################
+county_fips <- 6037 #LA 6037, Miami 12086
+all_models_brier_county <- map_dfr(names(predictive_probs), function(m) {
+  
+  predictive_probs[[m]] %>%
+    # 1. NEU: Filtere den Datensatz nur für ein county
+    filter(FIPS == county_fips) %>% 
+    
+    # calculate Brier-Score for each count in LA
+    mutate(
+      # does event of threshold a being greq outcome happen?
+      indicator = as.numeric(count >= actual),
+      # Brier score at threshold (count)
+      brier_score_k = (CDF - indicator)^2
+    ) %>%
+    
+    # group per count (i.e. threshold of the CRPS)
+    group_by(count) %>%
+    
+    # avg Brier over all counties 
+    # (Da es jetzt nur noch 1 County ist, gibt mean() hier einfach den exakten Wert für LA zurück)
+    summarise(
+      brier_avg = mean(brier_score_k),
+      .groups = "drop"
+    ) %>%
+    
+    # rename columns for following plots
+    mutate(
+      model = m,
+      a = count,
+      log_a_plus1 = log(a + 1)
+    ) %>%
+    
+    select(model, a, log_a_plus1, brier_avg)
+})
+
+selected_models_brier_county <- all_models_brier_county %>%
+  filter(model %in% selected_models)
+
+crps_brier_integrands_plot_county <- ggplot(selected_models_brier_county, aes(x = a, y = brier_avg, colour = model)) +
+  geom_line(size = .95, alpha = 0.8) + 
+  labs(
+    title = "Mean Brier Score by Threshold (CRPS Integrand) - Miami",
+    x = "Threshold a",
+    y = "Mean Brier Score",
+    colour = ""
+  ) +
+  xlim(0,50) + 
+  scale_color_manual(
+    values = selected_model_colors,
+    breaks = names(selected_model_labels),
+    labels = selected_model_labels
+  ) +
+  theme_bw() +
+  theme_fontsize
+
+crps_brier_integrands_plot_county
+
+if(store_plot == TRUE){
+  ggsave(paste0(folder,"/","crps_brier_integrands_plot_Miami.png"),
+         plot = crps_brier_integrands_plot_county, width = 1.0 * 4222, height = 1.0 * 1300, dpi = 300, units = "px",
+         bg="white")
+}
+
+
+twcrps_brier_integrands_plot_county <- ggplot(selected_models_brier_county, aes(x = a, y = brier_avg, colour = model)) +
+  geom_line(size = .95, alpha = 0.8) +
+  labs(
+    title = "Mean Brier Score by Log-Change Threshold (twCRPS Integrand) - Los Angeles",
+    x = "Threshold a",
+    y = "Mean Brier Score",
+    colour = ""
+  ) +
+  scale_color_manual(
+    values = selected_model_colors,
+    breaks = names(selected_model_labels),
+    labels = selected_model_labels
+  ) +
+  scale_x_continuous(
+    trans = "log1p", # transformation log(a+1)
+    breaks = c(0, 1, 5, 10, 50, 100) 
+  ) +
+  theme_bw() +
+  theme_fontsize
+
+twcrps_brier_integrands_plot_county
+
+if(store_plot == TRUE){
+  ggsave(paste0(folder,"/","twcrps_brier_integrands_plot_LA.png"),
+         plot = twcrps_brier_integrands_plot_county, width = 1.0 * 3200, height = 1.0 * 1300, dpi = 300, units = "px",
+         bg="white")
+}
+
 
 
 
