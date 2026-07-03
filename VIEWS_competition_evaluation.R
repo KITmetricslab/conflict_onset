@@ -569,6 +569,13 @@ selected_models <- c("bodentien_rueter_negbin", "conflictforecast_v2", # replace
                      "submission_muchlinski_thornhill", "ShapeFinder",
                      "submission_final_omm", "unito_transformer",
                      "conflictology", "zero")
+
+
+# ## only for WNND slides
+# selected_models <- c("bodentien_rueter_negbin", "tft", 
+#                      "submission_muchlinski_thornhill", "ShapeFinder",
+#                      "submission_final_omm", "unito_transformer",
+#                      "P_GLMM", "conflictology")
 ##
 ## --
 
@@ -1172,6 +1179,14 @@ compute_avg_brier_score_for_threshold <- function(model_data, prediciton_data, m
 # #----
 
 load("output/all_models_brier_threshold_extended.RData")
+
+
+# ## only for WNND slides
+# # selected models for WNND presentation HKmetrics
+# selected_models <- c("tft", 
+#                      "submission_muchlinski_thornhill", "ShapeFinder",
+#                      "submission_final_omm", "unito_transformer",
+#                      "P_GLMM")
 
 selected_models_brier <- all_models_brier_full %>%
   filter(model %in% selected_models)
@@ -2514,10 +2529,14 @@ if(store_plot == TRUE){
 }
 
 
+ggsave(paste0(folder,"/","selected_models_ranking_plot.png"),
+       plot = selected_models_ranking_plot, width = 1.0 * 4222, height = 0.7 * 2000, dpi = 300, units = "px",
+       bg="white")
 
 
-
-
+ggsave("plots_fatalities_greq25/selected_models_ranking_plot_greq255.png",
+       plot = selected_models_ranking_plot, width = 1.0 * 4222, height = 0.7 * 2000, dpi = 300, units = "px",
+       bg="white")
 
 
 
