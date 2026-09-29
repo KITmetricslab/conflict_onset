@@ -951,7 +951,7 @@ hist_main <- actual_2020_situations %>%
   ggplot(aes(x = actual, fill = situation)) +
   geom_histogram(binwidth = 1, color = "white", alpha = 0.9) +
   scale_fill_manual(
-    name = "Outbreak Status",
+    name = "Disease Situation",
     values = c("onset" = "#4664aa", 
                "ongoing" = "#a22223"),
     labels = c(
@@ -1118,33 +1118,6 @@ if(store_plot == TRUE){
          plot = wnvnd_crps_map_plot, width = 1.0 * 4222, height = 1.5 * 1300, dpi = 300, units = "px",
          bg="white")
 }
-
-
-##########################################################################################
-# Anteil der top 5 höchsten CRPS counties an Sum Mean CRPS - alle Modelle
-top_n_counties <- 5
-pareto_data <- map_data_crps %>%
-  # Wir nehmen den Mean CRPS oder Sum CRPS (je nachdem was du in der Map nutzt)
-  mutate(is_top = ifelse(rank(desc(sum_CRPS)) <= top_n_counties, 
-                         as.character(location), "Other Counties")) %>%
-  group_by(is_top) %>%
-  summarise(total_CRPS = sum(sum_CRPS), .groups = "drop") %>%
-  # Sortierung für den Plot
-  mutate(is_top = fct_reorder(is_top, total_CRPS, .desc = TRUE))
-
-ggplot(pareto_data, aes(x = is_top, y = total_CRPS, fill = is_top)) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = c("Other Counties" = "grey70", 
-                               "Los Angeles, CA" = "#a50026", # Highlight für bekannte Hotspots
-                               "Other Counties" = "grey80")) + # Farben anpassen
-  labs(title = "Dominance of High-CRPS Counties",
-       subtitle = paste("Contribution of Top", top_n_counties, "Counties vs. the Rest"),
-       x = "County",
-       y = "Sum of Mean CRPS") +
-  theme_minimal() +
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45, hjust = 1))
-################################################################################################
 
 
 ## -----------------------------------------------------------------------------
@@ -1760,9 +1733,7 @@ if(store_plot == TRUE){
 tg <- textGrob("", gp = gpar(fontsize = 18, hjust = 0.5)) #CORP Reliability Diagrams
 
 
-# -------------------------------------------------------------------
 # Define model labels and colors
-# -------------------------------------------------------------------
 model_labels_selected_models <- model_labels_df %>%
   filter(name_original %in% selected_models) %>%
   arrange(factor(name_original, levels = selected_models))
@@ -1773,9 +1744,7 @@ model_labels <- setNames(model_labels_selected_models$name_paper, model_labels_s
 # selected_colors <- RColorBrewer::brewer.pal(n = length(selected_models), "Set2")
 names(selected_colors) <- selected_models
 
-# -------------------------------------------------------------------
 # Function: Reliability Diagram
-# -------------------------------------------------------------------
 reliabilitydiag.custom <- function(fcst, obs, pathclr = "red", confnveau = 0.9, bndtype="diagonal", unc_mthd = "resampling", annt_score_decom = NA) {
   
   # compute reliability diagram
@@ -1977,9 +1946,7 @@ reliabilitydiag.custom <- function(fcst, obs, pathclr = "red", confnveau = 0.9, 
   return(p)
 }
 
-# -------------------------------------------------------------------
 # Generate plots for selected models
-# -------------------------------------------------------------------
 corp_plots_list_selected_no_prev_cases <- list()
 for (model_name in selected_models) {
   
@@ -2001,9 +1968,7 @@ for (model_name in selected_models) {
 }
 
 
-# -------------------------------------------------------------------
 # Arrange them in a grid with a title
-# -------------------------------------------------------------------
 grid.arrange(
   tg,
   do.call(arrangeGrob, c(corp_plots_list_selected_no_prev_cases, ncol = 4)),
@@ -2101,6 +2066,26 @@ df_actual_2020[df_actual_2020$FIPS == 12021, ]
 # Broward,FL
 df_actual_2018[df_actual_2018$FIPS == 12011, ]
 df_actual_2020[df_actual_2020$FIPS == 12011, ]
+
+
+# mean crps
+# LA
+crps_per_county[crps_per_county$FIPS == 6037, ]
+
+# Maricopa
+crps_per_county[crps_per_county$FIPS == 04013, ]
+
+# Miami,FL
+crps_per_county[crps_per_county$FIPS == 12086, ]
+
+
+max(crps_per_county$sum_CRPS, na.rm = TRUE)
+
+
+
+
+
+
 
 
 
