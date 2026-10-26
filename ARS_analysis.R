@@ -273,6 +273,15 @@ check_zero_2018 %>%
     n_not_over_99 = sum(!over_99_percent_zero),
     proportion_over_99 = mean(over_99_percent_zero)
   )
+check_zero_2018 %>%
+  filter(over_99_percent_zero == FALSE)
+
+check_approx_100_first_bin <- check_zero_2018 %>%
+  mutate(
+    approx_100_percent = first_bin >= 1 - 1e-3
+  )
+check_approx_100_first_bin %>%
+  filter(approx_100_percent == FALSE)
 
 # von insgesamt 2496 mit = 0 in 2018 haben 2494 counties > 99% Wk Masse im ersten bin
 

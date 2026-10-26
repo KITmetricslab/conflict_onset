@@ -1757,7 +1757,20 @@ reliabilitydiag.custom <- function(fcst, obs, pathclr = "red", confnveau = 0.9, 
   )
   
   # base plot
-  reliability_plot <- autoplot(r_selected)
+  #reliability_plot <- autoplot(r_selected)
+  
+  
+  # base plot with custom histogram
+  reliability_plot <- autoplot(
+    r_selected,
+    params_histogram = list(
+      yscale = 0.2,
+      drop = "all",
+      colour = "black",
+      fill = NA
+    )
+  )
+  
   
   # # strip out unwanted geom_segment layers
   # is_seg <- sapply(reliability_plot$layers, function(layer) {
