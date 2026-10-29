@@ -37,43 +37,121 @@ library(forcats)
 library(lubridate)
 library(knitr)
 
-#devtools::install_github("aijordan/reliabilitydiag")
 
-## ---------
-# load observational data (actuals)
-## ---------
+# ---- Configuration -----------------------------------------------------------
 
-# path to directory on "share-alle"
-data_path <- "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/" # Windows version
-#data_path <- "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/" # MacOS version
+## VIEWS data location.
+## This reproduces the platform-specific paths used in the original analysis.
+os <- Sys.info()[["sysname"]]
 
+data_dir <- if (os == "Windows") {
+  "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/"
+} else if (os == "Darwin") {
+  "/Volumes/share-alle/Data/VIEWS/"
+} else {
+  stop(
+    "No default VIEWS data path is configured for operating system: ",
+    os
+  )
+}
 
-# Erkenne das Betriebssystem
-os <- Sys.info()["sysname"]
+## Resolve repository-relative paths from the location of this script rather
+## than from the process working directory. This makes the script robust when
+## run via RStudio, Rscript, or from another directory.
+get_script_dir <- function() {
+  command_args <- commandArgs(trailingOnly = FALSE)
+  file_arg <- grep("^--file=", command_args, value = TRUE)
+  
+  if (length(file_arg) > 0L) {
+    return(
+      dirname(
+        normalizePath(
+          sub("^--file=", "", file_arg[[1L]]),
+          winslash = "/",
+          mustWork = TRUE
+        )
+      )
+    )
+  }
+  
+  if (
+    requireNamespace("rstudioapi", quietly = TRUE) &&
+    rstudioapi::isAvailable()
+  ) {
+    active_path <- rstudioapi::getActiveDocumentContext()$path
+    
+    if (nzchar(active_path)) {
+      return(
+        dirname(
+          normalizePath(
+            active_path,
+            winslash = "/",
+            mustWork = TRUE
+          )
+        )
+      )
+    }
+  }
+  
+  normalizePath(
+    getwd(),
+    winslash = "/",
+    mustWork = TRUE
+  )
+}
 
-# Setze den Pfad abhängig vom Betriebssystem
-# data_path <- "../Data/"
-data_path <- ifelse(os == "Windows",
-                    "//stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/",  # Windows
-                    "smb://stat-meth-file1.stat.kit.edu/share-alle/Data/VIEWS/")  # macOS/Linux
+script_dir <- get_script_dir()
 
-# round predictive samples to integers or not
+cache_dir <- file.path(script_dir, "output")
+publication_plot_dir <- file.path(script_dir, "plots_final")
+country_list_path <- file.path(script_dir, "country_list.csv")
+
+if (!dir.exists(data_dir)) {
+  stop(
+    "VIEWS data directory not found: ",
+    data_dir,
+    "\nPlease mount the KIT share-alle network drive first."
+  )
+}
+
+dir.create(publication_plot_dir, recursive = TRUE, showWarnings = FALSE)
+
 round_samples <- TRUE
 
-# actual data from 2018-2023 in the directory
-files_actuals_from18 <- list.files(data_path, pattern = "cm_actuals_\\d{4}\\.parquet", full.names = TRUE)
-# read all files and bind them into a single data frame
-observations_18_23 <- do.call(rbind, lapply(files_actuals_from18, arrow::read_parquet)) %>% # observations from 2018 - 2023
+files_actuals_from18 <- file.path(
+  data_dir,
+  paste0("cm_actuals_", 2018:2023, ".parquet")
+)
+
+# Check whether all six files exist
+stopifnot(all(file.exists(files_actuals_from18)))
+
+# Read and combine observations
+observations_18_23 <- purrr::map_dfr(
+  files_actuals_from18,
+  arrow::read_parquet
+) %>%
   arrange(country_id, month_id)
 
-country_id_list <- read_csv(
-  "country_list.csv",
+
+
+if (!file.exists(country_list_path)) {
+  stop(
+    "country_list.csv not found next to the analysis script. Expected: ",
+    country_list_path,
+    "\nPlace country_list.csv in the same repository directory as this R script."
+  )
+}
+
+country_id_list <- readr::read_csv(
+  country_list_path,
   col_types = cols(
     country_id = col_integer(),
     id         = col_integer(),
     name       = col_character()
   )
 )
+
 
 month_lookup <- tibble(
   month_id = 457:528,
@@ -88,10 +166,20 @@ month_lookup <- tibble(
 stopifnot(setequal(observations_18_23$month_id, month_lookup$month_id))
 
 
+# Path to UCDP GED v24.1
+ged_file <- file.path(
+  data_dir,
+  "ged251-csv",
+  "GEDEvent_v24_1.csv"
+)
+
+# Check whether the file exists
+stopifnot(file.exists(ged_file))
+
 
 ## all GED events to compare with VIEWS actuals
-GED_events_all <- read_csv(
-  file.path(data_path, "ged251-csv", "GEDEvent_v24_1.csv"), #GEDEvent_v25_1.csv
+GED_events_all <- readr::read_csv(
+  ged_file,
   show_col_types = FALSE,
   guess_max = Inf
 ) %>%
@@ -190,6 +278,11 @@ monthly_comparison <- observations_18_23 %>%
       NA_real_
     )
   )
+
+stopifnot(
+  !anyNA(monthly_comparison$difference),
+  all(monthly_comparison$difference == 0)
+)
 
 # Are fatalities coinsiding for every country-month pair between GED and VIEWS?
 monthly_comparison %>%
@@ -387,7 +480,9 @@ latex_table <- knitr::kable(
 
 cat(latex_table)
 
+## -----
 ## Distribution of multimonth event duration (not included in paper)
+## -----
 duration_distr <- bind_rows(
   event_durations,
   event_durations %>% mutate(name = "Total")
@@ -401,6 +496,8 @@ duration_distr <- bind_rows(
     SD = sd(ged_event_months),
     .groups = "drop"
   )
+
+duration_distr
 
 ## -----
 ## country-month pairs with highest multimonth shares table (not included in paper)
@@ -429,76 +526,13 @@ top_country_months %>%
 
 
 
-
-
-
-
-##########################
-
-
-## monthly development across test years ----------------------------
-
-time_summary <- GED_multimonth_details %>%
-  mutate(
-    month_date = lubridate::floor_date(ged_date_end, "month")
-  ) %>%
-  group_by(month_date) %>%
-  summarise(
-    n_events = n(),
-    fatalities_multimonth = sum(best, na.rm = TRUE),
-    fatalities_per_event = mean(best, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  right_join(
-    month_lookup %>% select(month_date),
-    by = "month_date"
-  ) %>%
-  mutate(
-    n_events = coalesce(n_events, 0L),
-    fatalities_multimonth = coalesce(fatalities_multimonth, 0)
-  ) %>%
-  arrange(month_date)
-
-time_long <- time_summary %>%
-  pivot_longer(
-    cols = c(n_events, fatalities_multimonth, fatalities_per_event),
-    names_to = "metric",
-    values_to = "value"
-  ) %>%
-  mutate(
-    metric = factor(
-      metric,
-      levels = c("n_events", "fatalities_multimonth",
-                 "fatalities_per_event"),
-      labels = c("Number of events",
-                 "Multimonth fatalities",
-                 "Average fatalities per event")
-    )
-  )
-
-p4 <- ggplot(
-  time_long,
-  aes(x = month_date, y = value)
-) +
-  geom_col(fill = "steelblue", width = 25) +
-  facet_wrap(~metric, ncol = 1, scales = "free_y") +
-  scale_x_date(
-    date_breaks = "1 year",
-    date_labels = "%Y"
-  ) +
-  labs(
-    title = "Temporal distribution of multimonth events",
-    subtitle = "Events and fatalities assigned to their ending month",
-    x = NULL,
-    y = NULL
-  ) +
-  theme_minimal()
-
-p4
-
+############################################################################
+## Plots
 ############################################################################
 
-## Publication plot settings ------------------------------------------
+## -----
+## Publication plot settings
+## -----
 
 publication_dpi <- 300
 publication_plot_width_px <- 3600
@@ -565,7 +599,130 @@ number_labels <- function(x) {
 }
 
 
-## Prepare plot data --------------------------------------------------
+# ---- Publication export settings --------------------------------------------
+
+publication_dpi <- 300
+publication_plot_width_px <- 3600
+publication_height_scale <- 2 / 3
+
+single_panel_height_px <- round((4 / 5) * 1.2 * 1322)
+double_panel_height_px <- 2 * single_panel_height_px
+
+
+save_plot_for_latex <- function(
+    filename,
+    plot_object,
+    height_px,
+    height_scale = publication_height_scale,
+    ragg_device = FALSE
+) {
+  
+  plot_for_export <- if (inherits(plot_object, "patchwork")) {
+    plot_object & theme_publication_text
+  } else {
+    plot_object + theme_publication_text
+  }
+  
+  ggplot2::ggsave(
+    filename = filename,
+    plot = plot_for_export,
+    width = publication_plot_width_px,
+    height = round(height_scale * height_px),
+    dpi = publication_dpi,
+    units = "px",
+    device = if (ragg_device) ragg::agg_png else grDevices::png,
+    bg = "white"
+  )
+}
+
+triple_country_height_px <- 3 * single_panel_height_px
+triple_situation_height_px <- round(
+  3900 * publication_plot_width_px / 4222
+)
+double_threshold_height_px <- round(
+  2600 * publication_plot_width_px / 4222
+)
+roc_plot_height_px <- round(
+  1470 * publication_plot_width_px / 3400
+)
+reliability_plot_height_px <- round(
+  1800 * publication_plot_width_px / 3400
+)
+model_ranking_height_px <- round(
+  (3 / 5) * 2000 * publication_plot_width_px / 4222
+)
+triple_model_ranking_height_px <- 3 * model_ranking_height_px
+
+publication_base_size_pt <- 12
+publication_axis_title_size_pt <- 13
+publication_panel_title_size_pt <- 12
+
+## Use exactly the same legend-key dimensions in every publication figure.
+publication_legend_key_width_pt <- 12
+publication_legend_key_height_pt <- 12
+publication_legend_key_spacing_y_pt <- 2
+
+pt_to_mm <- 1 / 2.845276
+publication_geom_text_size <- publication_base_size_pt * pt_to_mm
+
+theme_no_plot_title <- ggplot2::theme(
+  plot.title = ggplot2::element_blank(),
+  plot.subtitle = ggplot2::element_blank()
+)
+
+theme_publication_text <- ggplot2::theme(
+  text = ggplot2::element_text(size = publication_base_size_pt),
+  axis.title = ggplot2::element_text(size = publication_axis_title_size_pt),
+  axis.text = ggplot2::element_text(size = publication_base_size_pt),
+  legend.title = ggplot2::element_text(size = publication_base_size_pt),
+  legend.text = ggplot2::element_text(size = publication_base_size_pt),
+  legend.key.width = grid::unit(publication_legend_key_width_pt, "pt"),
+  legend.key.height = grid::unit(publication_legend_key_height_pt, "pt"),
+  legend.key.spacing.y = grid::unit(publication_legend_key_spacing_y_pt, "pt"),
+  strip.text = ggplot2::element_text(size = publication_base_size_pt)
+)
+
+theme_fontsize <- ggplot2::theme(
+  plot.title = ggplot2::element_blank(),
+  plot.subtitle = ggplot2::element_blank(),
+  text = ggplot2::element_text(size = publication_base_size_pt),
+  axis.title = ggplot2::element_text(size = publication_axis_title_size_pt),
+  axis.text = ggplot2::element_text(size = publication_base_size_pt),
+  legend.title = ggplot2::element_text(size = publication_base_size_pt),
+  legend.text = ggplot2::element_text(size = publication_base_size_pt),
+  legend.key.width = grid::unit(publication_legend_key_width_pt, "pt"),
+  legend.key.height = grid::unit(publication_legend_key_height_pt, "pt"),
+  legend.key.spacing.y = grid::unit(publication_legend_key_spacing_y_pt, "pt"),
+  strip.text = ggplot2::element_text(size = publication_base_size_pt)
+)
+
+extract_grob_labels <- function(grob) {
+  labels <- character()
+  
+  if (!is.null(grob$label)) {
+    labels <- c(labels, as.character(grob$label))
+  }
+  
+  if (!is.null(grob$children)) {
+    for (child_name in names(grob$children)) {
+      labels <- c(labels, extract_grob_labels(grob$children[[child_name]]))
+    }
+  }
+  
+  if (!is.null(grob$grobs)) {
+    for (child_grob in grob$grobs) {
+      labels <- c(labels, extract_grob_labels(child_grob))
+    }
+  }
+  
+  labels
+}
+
+## ---------------------------------------------------------------------------------
+## Two panel bar chart: number of multimonth events and corresponding fatalities
+## ---------------------------------------------------------------------------------
+
+## Prepare plot data
 
 # Identify countries not among the highlighted five
 other_ids <- sort(
@@ -595,10 +752,10 @@ plot_colours <- c(
 
 # Stacking order: bottom to top
 stack_levels <- c(
-  "Single-month fatalities",
   other_keys,
   rev(top5_names),
-  "Others"
+  "Others",
+  "Single-month fatalities"
 )
 
 # Prepare country-month data
@@ -626,7 +783,7 @@ stopifnot(
 )
 
 
-## Create monthly stacked-bar data ------------------------------------
+## Create monthly stacked-bar data
 
 # Upper panel: number of multimonth events
 events_data <- plot_data %>%
@@ -662,7 +819,7 @@ fatalities_data <- bind_rows(
 )
 
 
-## Calculate stacked segment positions --------------------------------
+## Calculate stacked segment positions
 
 # This ensures every component has exactly the same x position
 # and each segment starts where the previous one ends.
@@ -692,7 +849,7 @@ events_segments <- make_segments(events_data)
 fatalities_segments <- make_segments(fatalities_data)
 
 
-## Verify monthly bar totals ------------------------------------------
+## Verify monthly bar totals
 
 # The sum of all stacked segments must equal VIEWS actuals
 height_check <- fatalities_data %>%
@@ -717,7 +874,7 @@ stopifnot(
 )
 
 
-## Shared plot theme --------------------------------------------------
+## Shared plot theme
 
 theme_multimonth <- theme_minimal() +
   theme(
@@ -741,7 +898,7 @@ month_axis <- scale_x_continuous(
 )
 
 
-## Upper panel: multimonth events -------------------------------------
+## Upper panel: multimonth events
 
 p_events <- ggplot(
   events_segments,
@@ -779,7 +936,7 @@ p_events <- ggplot(
 # but only the lower panel receives the x-axis title.
 
 
-## Lower panel: all fatalities ---------------------------------------
+## Lower panel: all fatalities
 
 p_fatalities <- ggplot(
   fatalities_segments,
@@ -827,7 +984,7 @@ p_fatalities <- ggplot(
   ) +
   theme_multimonth
 
-## Create correctly colored shared legend ----------------------------
+## Create correctly colored shared legend
 
 # Custom legend key:
 # - highlighted countries: their original colors
@@ -924,6 +1081,11 @@ legend_source <- ggplot(
     values = legend_colours,
     breaks = legend_levels,
     limits = legend_levels,
+    labels = c(
+      top5_names,
+      "Others",
+      "Single-month events"
+    ),
     drop = FALSE,
     name = NULL
   ) +
@@ -950,84 +1112,57 @@ legend_source <- ggplot(
 shared_legend <- cowplot::get_legend(legend_source)
 
 
-## Combine aligned panels ---------------------------------------------
-
-# Use patchwork for consistent alignment of y-axis titles
-# and plotting areas, as in the VIEWS figures
+## Combine aligned panels
 
 combined_panels <- (
   p_events /
     p_fatalities
 ) +
   patchwork::plot_layout(
-    heights = c(1, 1.4)
+    heights = c(1, 1)
   )
 
 # Add the separately generated legend
-p4 <- cowplot::plot_grid(
+p_views_double_country_multimonth_event_fatalities <- cowplot::plot_grid(
   combined_panels,
   shared_legend,
   ncol = 2,
   rel_widths = c(1, 0.19)
 )
 
+## Export for LaTeX
 
-## Export for LaTeX ---------------------------------------------------
-
-ggplot2::ggsave(
-  filename = "Plot_VIEWS_multimonth.png",
-  plot = p4,
-  width = 3600,
-  height = 2400,
-  units = "px",
-  dpi = 300,
-  device = ragg::agg_png,
-  bg = "white"
+save_plot_for_latex(
+  filename = file.path(publication_plot_dir, "Plot_VIEWS_multimonth_fatalities.png"),
+  plot_object = p_views_double_country_multimonth_event_fatalities + theme_no_plot_title,
+  height_px = double_panel_height_px,
+  height_scale = publication_height_scale * (5 / 4),
+  ragg_device = TRUE
 )
 
 
+## --------------------------------------------------------------------------------
+## Scatter plot: fatalities per multimonth event
+## --------------------------------------------------------------------------------
 
-
-
-
-
-##############################################################################
-
-
-
-
-
-
-
-
-
-##################################################################################
-
-## Scatter plot: fatalities per multimonth event -----------------------
-
-# Top 5 countries by total multimonth fatalities
-top5_countries <- country_summary %>%
-  slice_max(
-    order_by = fatalities_multimonth,
-    n = 5,
-    with_ties = FALSE
-  ) %>%
+# Top 5 countries by total fatalities
+top5_countries <- country_id_list %>%
+  filter(name %in% top5_names) %>%
+  arrange(match(name, top5_names)) %>%
   select(country_id, name)
 
 
-## Colors -------------------------------------------------------------
+## Colors
 
 # Retain the country colors from fatalities_worldwide_plot.
-# Azerbaijan receives an additional color.
 scatter_colours <- c(
   fatality_country_colours,
-  "Azerbaijan" = "#CC79A7",
-  "Other countries" = "grey70"
+  "Others" = "grey65"
 )
 
 scatter_legend_levels <- c(
-  top5_countries$name,
-  "Other countries"
+  top5_names,
+  "Others"
 )
 
 stopifnot(
@@ -1035,7 +1170,7 @@ stopifnot(
 )
 
 
-## Prepare scatter data -----------------------------------------------
+## Prepare scatter data
 
 scatter_data <- GED_multimonth_details %>%
   filter(best > 0) %>%
@@ -1046,7 +1181,7 @@ scatter_data <- GED_multimonth_details %>%
   mutate(
     highlight_country = if_else(
       is.na(name),
-      "Other countries",
+      "Others",
       name
     ),
     highlight_country = factor(
@@ -1067,7 +1202,7 @@ scatter_size_max <- max(
 )
 
 
-## Function to create one 3-year panel -------------------------------
+## Function to create one 3-year panel
 
 make_scatter_panel <- function(
     first_month,
@@ -1106,14 +1241,16 @@ make_scatter_panel <- function(
     )
   ) +
     
-    # Events assigned to their ending month
     geom_point(
+      aes(fill = highlight_country),
       position = position_jitter(
         width = 0.20,
         height = 0,
         seed = 42
       ),
-      alpha = 0.90
+      shape = 21,
+      stroke = 0.8,
+      alpha = 0.65
     ) +
     
     # Dashed year boundaries
@@ -1132,9 +1269,13 @@ make_scatter_panel <- function(
       name = NULL
     ) +
     
-    # Same point-size encoding in both panels
+    scale_fill_manual(
+      values = scatter_colours,
+      guide = "none"
+    ) +
+    
     scale_size_continuous(
-      name = "Event duration\n(months)",
+      name = "Duration (months)",
       limits = c(2, scatter_size_max),
       range = c(1.4, 5.8),
       breaks = c(2, 4, 6, 8, 10, 12)
@@ -1151,7 +1292,7 @@ make_scatter_panel <- function(
       expand = expansion(mult = 0.05)
     ) +
     
-    # Identical pseudo-log scale for both panels
+    # Identical log scale for both panels
     scale_y_log10(
       limits = c(0.3, scatter_y_max),
       breaks = c(
@@ -1162,19 +1303,25 @@ make_scatter_panel <- function(
       expand = expansion(mult = c(0, 0.05))
     ) +
     
-    # Legend design
     guides(
       size = guide_legend(
         order = 1,
         override.aes = list(
-          colour = "grey60",
+          shape = 21,
+          fill = "grey90",
+          colour = "black",
+          stroke = 0.6,
           alpha = 1
         )
       ),
       colour = guide_legend(
         order = 2,
         override.aes = list(
+          shape = 21,
+          fill = unname(scatter_colours[scatter_legend_levels]),
+          colour = unname(scatter_colours[scatter_legend_levels]),
           size = 4.8,
+          stroke = 0.8,
           alpha = 1
         )
       )
@@ -1182,7 +1329,7 @@ make_scatter_panel <- function(
     
     labs(
       x = if (show_x_title) "Ending month" else NULL,
-      y = "Fatalities per event (log10 scale)"
+      y = "Fatalities per event (log scale)"
     ) +
     
     theme_multimonth +
@@ -1213,7 +1360,7 @@ make_scatter_panel <- function(
 }
 
 
-## Upper panel: January 2018 – December 2020 -------------------------
+## Upper panel: January 2018 – December 2020
 
 p_scatter_18_20 <- make_scatter_panel(
   first_month = 457,
@@ -1222,18 +1369,20 @@ p_scatter_18_20 <- make_scatter_panel(
 )
 
 
-## Lower panel: January 2021 – December 2023 -------------------------
+## Lower panel: January 2021 – December 2023
 
 p_scatter_21_23 <- make_scatter_panel(
   first_month = 493,
   last_month = 528,
   show_x_title = TRUE
 )
+p_scatter_21_23 <- p_scatter_21_23 +
+  guides(colour = "none")
 
 
-## Combine panels -----------------------------------------------------
+## Combine panels
 
-p3 <- (
+p_views_double_multimonth_event_scatter <- (
   p_scatter_18_20 /
     p_scatter_21_23
 ) +
@@ -1246,21 +1395,15 @@ p3 <- (
     legend.position = "right"
   )
 
-# Display
-p3
 
+## Export for LaTeX
 
-## Export for LaTeX ---------------------------------------------------
-
-ggplot2::ggsave(
-  filename = "Plot_VIEWS_multimonth_scatter.png",
-  plot = p3,
-  width = publication_plot_width_px,
-  height = 2400,
-  units = "px",
-  dpi = publication_dpi,
-  device = ragg::agg_png,
-  bg = "white"
+save_plot_for_latex(
+  filename = file.path(publication_plot_dir, "Plot_VIEWS_multimonth_satter_events.png"),
+  plot_object = p_views_double_multimonth_event_scatter + theme_no_plot_title,
+  height_px = double_panel_height_px,
+  height_scale = publication_height_scale * (5 / 4),
+  ragg_device = TRUE
 )
 
 
